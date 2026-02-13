@@ -5,8 +5,24 @@
  * 在浏览器环境中会自动回退到 mockTauri 实现。
  */
 
-import { invoke } from "@tauri-apps/api/core"
 import type { Trip, UserPreferences } from "../types"
+
+// Lazy import Tauri API to avoid "process is not defined" error in browser
+type InvokeFunction = <T = unknown>(cmd: string, args?: Record<string, unknown>) => Promise<T>
+let invoke: InvokeFunction | null = null
+
+async function getInvoke(): Promise<InvokeFunction | null> {
+  if (!invoke) {
+    try {
+      const tauri = await import("@tauri-apps/api/core")
+      invoke = tauri.invoke as InvokeFunction
+    } catch {
+      // Tauri not available
+      invoke = null
+    }
+  }
+  return invoke
+}
 
 // ============================================================================
 // Error Types
@@ -50,8 +66,9 @@ class TauriStorageService {
    */
   async saveTrip(trip: Trip): Promise<void> {
     try {
-      if (isTauriAvailable()) {
-        await invoke("save_trip", { trip })
+      const invoker = await getInvoke()
+      if (isTauriAvailable() && invoker) {
+        await invoker("save_trip", { trip })
       } else {
         // Fallback to mock implementation
         const { TauriStorage } = await import("../lib/mockTauri")
@@ -69,9 +86,10 @@ class TauriStorageService {
   async loadTrips(): Promise<Trip[]> {
     try {
       let trips: unknown[]
+      const invoker = await getInvoke()
 
-      if (isTauriAvailable()) {
-        trips = await invoke<Trip[]>("load_trips")
+      if (isTauriAvailable() && invoker) {
+        trips = await invoker<Trip[]>("load_trips")
       } else {
         // Fallback to mock implementation
         const { TauriStorage } = await import("../lib/mockTauri")
@@ -92,9 +110,10 @@ class TauriStorageService {
   async loadTrip(id: string): Promise<Trip | null> {
     try {
       let trip: unknown
+      const invoker = await getInvoke()
 
-      if (isTauriAvailable()) {
-        trip = await invoke<Trip>("load_trip", { id })
+      if (isTauriAvailable() && invoker) {
+        trip = await invoker<Trip>("load_trip", { id })
       } else {
         // Fallback to mock implementation
         const { TauriStorage } = await import("../lib/mockTauri")
@@ -121,8 +140,9 @@ class TauriStorageService {
    */
   async deleteTrip(id: string): Promise<void> {
     try {
-      if (isTauriAvailable()) {
-        await invoke("delete_trip", { id })
+      const invoker = await getInvoke()
+      if (isTauriAvailable() && invoker) {
+        await invoker("delete_trip", { id })
       } else {
         // Fallback to mock implementation
         const { TauriStorage } = await import("../lib/mockTauri")
@@ -139,8 +159,9 @@ class TauriStorageService {
    */
   async tripExists(id: string): Promise<boolean> {
     try {
-      if (isTauriAvailable()) {
-        return await invoke<boolean>("trip_exists", { id })
+      const invoker = await getInvoke()
+      if (isTauriAvailable() && invoker) {
+        return await invoker<boolean>("trip_exists", { id })
       } else {
         // Fallback: try to load the trip
         const trip = await this.loadTrip(id)
@@ -156,8 +177,9 @@ class TauriStorageService {
    */
   async savePreferences(preferences: UserPreferences): Promise<void> {
     try {
-      if (isTauriAvailable()) {
-        await invoke("save_preferences", { prefs: preferences })
+      const invoker = await getInvoke()
+      if (isTauriAvailable() && invoker) {
+        await invoker("save_preferences", { prefs: preferences })
       } else {
         // Fallback to mock implementation
         const { TauriStorage } = await import("../lib/mockTauri")
@@ -178,9 +200,10 @@ class TauriStorageService {
   async loadPreferences(): Promise<UserPreferences | null> {
     try {
       let prefs: unknown
+      const invoker = await getInvoke()
 
-      if (isTauriAvailable()) {
-        prefs = await invoke<UserPreferences | null>("load_preferences")
+      if (isTauriAvailable() && invoker) {
+        prefs = await invoker<UserPreferences | null>("load_preferences")
       } else {
         // Fallback to mock implementation
         const { TauriStorage } = await import("../lib/mockTauri")
@@ -202,8 +225,9 @@ class TauriStorageService {
    */
   async getDataDir(): Promise<string> {
     try {
-      if (isTauriAvailable()) {
-        return await invoke<string>("get_data_dir")
+      const invoker = await getInvoke()
+      if (isTauriAvailable() && invoker) {
+        return await invoker<string>("get_data_dir")
       } else {
         return "localStorage (browser mode)"
       }

@@ -6,7 +6,11 @@
 
 - **Multi-Agent 系统**: 5 个专业 Agent 协同工作（协调者、规划师、推荐师、预订师、文档师）
 - **A2UI 主动询问**: 智能收集缺失的旅行信息（目的地、天数、预算、偏好）
+  ![A2UI](images/a2ui.png)
 - **AGUI 实时界面**: 可视化展示 Agent 思考过程和工具调用状态
+  ![AGUI](images/agui.png)
+- **Agent 协作流程**: Multi-Agent 系统协调各专业 Agent 生成完整旅行方案
+  ![Agent 规划流程](images/agent规划.png)
 - **LLM 集成**: 使用智谱 AI GLM-4-Flash 生成个性化行程
 - **外部 API 集成**: OpenWeatherMap、Google Places 提供实时数据
 - **Tauri 桌面应用**: 跨平台桌面应用支持
@@ -85,6 +89,11 @@ trip-agent/
 
 ## Agent 架构
 
+### Multi-Agent 协作流程
+![Agent 规划流程](images/agent规划.png)
+
+### 专业 Agent 分工
+
 | Agent | 职责 |
 |-------|------|
 | SupervisorAgent | 协调各 Agent 工作流程 |
@@ -92,6 +101,14 @@ trip-agent/
 | RecommenderAgent | 推荐景点、餐厅、酒店 |
 | BookingAgent | 处理预订相关信息 |
 | DocumentAgent | 生成可导出的行程文档 |
+
+### A2UI - 智能信息收集
+当用户信息不完整时，系统会主动询问补充信息：
+![A2UI 界面](images/a2ui.png)
+
+### AGUI - 实时进度展示
+可视化展示 Agent 思考过程和工具调用状态：
+![AGUI 界面](images/agui.png)
 
 ## API 密钥获取
 
