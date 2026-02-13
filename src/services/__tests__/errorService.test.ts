@@ -352,6 +352,7 @@ describe("ErrorService", () => {
 
       // Check auth error is NOT retryable
       expect(isRetryable(ErrorCode.INVALID_API_KEY)).toBe(false)
+      expect(isRetryable(ErrorCode.AUTH_EXPIRED)).toBe(false)
     })
   })
 })
