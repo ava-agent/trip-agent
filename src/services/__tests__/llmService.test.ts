@@ -3,11 +3,6 @@
  * Tests for LLM API integration functionality
  */
 
-// Note: Tests are disabled until vitest is added to devDependencies
-// To enable tests, run: npm install --save-dev vitest
-// Then uncomment the test code below
-
-/*
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { LLMService, LLMAPIError, loadLLMConfigFromEnv, PROMPTS } from '../llmService'
 
@@ -70,26 +65,29 @@ describe('LLMService', () => {
         'data: [DONE]\n\n',
       ]
 
+      // Create reader with releaseLock
+      const reader = {
+        read: vi.fn()
+          .mockResolvedValueOnce({
+            done: false,
+            value: new TextEncoder().encode(mockStreamChunks[0])
+          })
+          .mockResolvedValueOnce({
+            done: false,
+            value: new TextEncoder().encode(mockStreamChunks[1])
+          })
+          .mockResolvedValueOnce({
+            done: false,
+            value: new TextEncoder().encode(mockStreamChunks[2])
+          })
+          .mockResolvedValueOnce({ done: true }),
+        releaseLock: vi.fn(),
+      }
+
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
         body: {
-          getReader: () => ({
-            read: vi.fn()
-              .mockResolvedValueOnce({
-                done: false,
-                value: new TextEncoder().encode(mockStreamChunks[0])
-              })
-              .mockResolvedValueOnce({
-                done: false,
-                value: new TextEncoder().encode(mockStreamChunks[1])
-              })
-              .mockResolvedValueOnce({
-                done: false,
-                value: new TextEncoder().encode(mockStreamChunks[2])
-              })
-              .mockResolvedValueOnce({ done: true }),
-          }),
-          releaseLock: vi.fn(),
+          getReader: () => reader,
         },
       } as unknown as Response)
 
@@ -141,22 +139,25 @@ describe('LLMService', () => {
         'data: {"type":"content_block_delta","delta":{"text":" world"}}\n\n',
       ]
 
+      // Create reader with releaseLock
+      const reader = {
+        read: vi.fn()
+          .mockResolvedValueOnce({
+            done: false,
+            value: new TextEncoder().encode(mockStreamChunks[0])
+          })
+          .mockResolvedValueOnce({
+            done: false,
+            value: new TextEncoder().encode(mockStreamChunks[1])
+          })
+          .mockResolvedValueOnce({ done: true }),
+        releaseLock: vi.fn(),
+      }
+
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
         body: {
-          getReader: () => ({
-            read: vi.fn()
-              .mockResolvedValueOnce({
-                done: false,
-                value: new TextEncoder().encode(mockStreamChunks[0])
-              })
-              .mockResolvedValueOnce({
-                done: false,
-                value: new TextEncoder().encode(mockStreamChunks[1])
-              })
-              .mockResolvedValueOnce({ done: true }),
-          }),
-          releaseLock: vi.fn(),
+          getReader: () => reader,
         },
       } as unknown as Response)
 
@@ -187,26 +188,29 @@ describe('LLMService', () => {
         'data: [DONE]\n\n',
       ]
 
+      // Create reader with releaseLock
+      const reader = {
+        read: vi.fn()
+          .mockResolvedValueOnce({
+            done: false,
+            value: new TextEncoder().encode(mockStreamChunks[0])
+          })
+          .mockResolvedValueOnce({
+            done: false,
+            value: new TextEncoder().encode(mockStreamChunks[1])
+          })
+          .mockResolvedValueOnce({
+            done: false,
+            value: new TextEncoder().encode(mockStreamChunks[2])
+          })
+          .mockResolvedValueOnce({ done: true }),
+        releaseLock: vi.fn(),
+      }
+
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
         body: {
-          getReader: () => ({
-            read: vi.fn()
-              .mockResolvedValueOnce({
-                done: false,
-                value: new TextEncoder().encode(mockStreamChunks[0])
-              })
-              .mockResolvedValueOnce({
-                done: false,
-                value: new TextEncoder().encode(mockStreamChunks[1])
-              })
-              .mockResolvedValueOnce({
-                done: false,
-                value: new TextEncoder().encode(mockStreamChunks[2])
-              })
-              .mockResolvedValueOnce({ done: true }),
-          }),
-          releaseLock: vi.fn(),
+          getReader: () => reader,
         },
       } as unknown as Response)
 
@@ -270,8 +274,9 @@ describe('LLMService', () => {
       })
 
       await expect(async () => {
+        const chunks: unknown[] = []
         for await (const chunk of LLMService.streamChat([{ role: 'user', content: 'Test' }])) {
-          // consume
+          chunks.push(chunk)
         }
       }).rejects.toThrow()
     })
@@ -341,15 +346,15 @@ describe('LLMService', () => {
 
   describe('Environment Configuration', () => {
     it('should load config from environment', () => {
-      // Mock import.meta.env
-      vi.stubGlobal('import', {
-        meta: {
-          env: {
-            VITE_OPENAI_API_KEY: 'test-env-key',
-            VITE_OPENAI_MODEL: 'gpt-4o-mini',
-          },
-        },
-      })
+      // Save original env values
+      const originalOpenAIKey = import.meta.env.VITE_OPENAI_API_KEY
+      const originalOpenAIModel = import.meta.env.VITE_OPENAI_MODEL
+      const originalGLMKey = import.meta.env.VITE_GLM_API_KEY
+
+      // Mock import.meta.env values
+      import.meta.env.VITE_GLM_API_KEY = ''
+      import.meta.env.VITE_OPENAI_API_KEY = 'test-env-key'
+      import.meta.env.VITE_OPENAI_MODEL = 'gpt-4o-mini'
 
       const config = loadLLMConfigFromEnv()
 
@@ -359,35 +364,51 @@ describe('LLMService', () => {
         model: 'gpt-4o-mini',
       })
 
-      vi.unstubAllGlobals()
+      // Restore original values
+      import.meta.env.VITE_GLM_API_KEY = originalGLMKey
+      import.meta.env.VITE_OPENAI_API_KEY = originalOpenAIKey
+      import.meta.env.VITE_OPENAI_MODEL = originalOpenAIModel
     })
 
     it('should return null when no API keys are set', () => {
-      vi.stubGlobal('import', {
-        meta: { env: {} },
-      })
+      // Save original env values
+      const originalGLMKey = import.meta.env.VITE_GLM_API_KEY
+      const originalOpenAIKey = import.meta.env.VITE_OPENAI_API_KEY
+      const originalAnthropicKey = import.meta.env.VITE_ANTHROPIC_API_KEY
+
+      // Clear all API keys
+      import.meta.env.VITE_GLM_API_KEY = ''
+      import.meta.env.VITE_OPENAI_API_KEY = ''
+      import.meta.env.VITE_ANTHROPIC_API_KEY = ''
 
       const config = loadLLMConfigFromEnv()
       expect(config).toBeNull()
 
-      vi.unstubAllGlobals()
+      // Restore original values
+      import.meta.env.VITE_GLM_API_KEY = originalGLMKey
+      import.meta.env.VITE_OPENAI_API_KEY = originalOpenAIKey
+      import.meta.env.VITE_ANTHROPIC_API_KEY = originalAnthropicKey
     })
 
     it('should prefer OpenAI over Anthropic', () => {
-      vi.stubGlobal('import', {
-        meta: {
-          env: {
-            VITE_OPENAI_API_KEY: 'openai-key',
-            VITE_ANTHROPIC_API_KEY: 'anthropic-key',
-          },
-        },
-      })
+      // Save original env values
+      const originalGLMKey = import.meta.env.VITE_GLM_API_KEY
+      const originalOpenAIKey = import.meta.env.VITE_OPENAI_API_KEY
+      const originalAnthropicKey = import.meta.env.VITE_ANTHROPIC_API_KEY
+
+      // Set both keys
+      import.meta.env.VITE_GLM_API_KEY = ''
+      import.meta.env.VITE_OPENAI_API_KEY = 'openai-key'
+      import.meta.env.VITE_ANTHROPIC_API_KEY = 'anthropic-key'
 
       const config = loadLLMConfigFromEnv()
       expect(config?.provider).toBe('openai')
 
-      vi.unstubAllGlobals()
+      // Restore original values
+      import.meta.env.VITE_GLM_API_KEY = originalGLMKey
+      import.meta.env.VITE_OPENAI_API_KEY = originalOpenAIKey
+      import.meta.env.VITE_ANTHROPIC_API_KEY = originalAnthropicKey
     })
   })
 })
-*/
+

@@ -1,10 +1,12 @@
-import { Plane, Moon, Sun } from "lucide-react"
+import { Plane, Moon, Sun, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useUiStore } from "@/stores/uiStore"
 
 export function Header() {
   const darkMode = useUiStore((state) => state.darkMode)
+  const settingsOpen = useUiStore((state) => state.settingsOpen)
   const setDarkMode = useUiStore((state) => state.setDarkMode)
+  const toggleSettings = useUiStore((state) => state.toggleSettings)
 
   const toggleDarkMode = () => {
     const newMode = !darkMode
@@ -34,7 +36,13 @@ export function Header() {
         >
           {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
         </Button>
-        <Button variant="ghost" size="sm">设置</Button>
+        <Button
+          variant={settingsOpen ? "default" : "ghost"}
+          size="sm"
+          onClick={toggleSettings}
+        >
+          {settingsOpen ? <X className="h-4 w-4 mr-2" /> : "设置"}
+        </Button>
         <Button variant="outline" size="sm">新旅行</Button>
       </div>
     </header>

@@ -1,12 +1,64 @@
 /**
  * External API Integration Service
  * Integrates with OpenWeatherMap, Google Places, and hotel booking APIs
- * Features: caching, rate limiting, graceful fallback to mock data
+ * Features: caching, rate limiting, timeout handling, circuit breaker, retry logic
  */
 
 // ============================================================================
 // Types
 // ============================================================================
+
+// Circuit breaker states
+type CircuitState = "closed" | "open" | "half-open"
+
+// Circuit breaker configuration
+interface CircuitBreakerConfig {
+  failureThreshold: number // Number of failures before opening
+  resetTimeout: number // Milliseconds to wait before trying half-open
+  monitoringPeriod: number // Milliseconds to consider for failure counting
+}
+
+// Circuit breaker state tracking
+interface CircuitBreakerState {
+  state: CircuitState
+  failureCount: number
+  lastFailureTime: Date | null
+  lastStateChange: Date
+  nextAttemptTime: Date | null
+}
+
+// Retry configuration
+interface RetryConfig {
+  maxRetries: number
+  baseDelay: number // Base delay in milliseconds
+  maxDelay: number // Maximum delay in milliseconds
+  retryableStatusCodes: Set<number>
+  retryableErrors: Set<string>
+}
+
+// API error types for comprehensive error handling
+enum ApiErrorType {
+  TIMEOUT = "TIMEOUT",
+  QUOTA_EXCEEDED = "QUOTA_EXCEEDED",
+  RATE_LIMIT = "RATE_LIMIT",
+  UNAUTHORIZED = "UNAUTHORIZED",
+  NETWORK_ERROR = "NETWORK_ERROR",
+  SERVER_ERROR = "SERVER_ERROR",
+  UNKNOWN = "UNKNOWN"
+}
+
+// Custom API error class
+class ApiError extends Error {
+  constructor(
+    public type: ApiErrorType,
+    public service: string,
+    message: string,
+    public originalError?: unknown
+  ) {
+    super(message)
+    this.name = "ApiError"
+  }
+}
 
 export interface WeatherData {
   city: string
@@ -132,6 +184,254 @@ interface GooglePlacesResponse {
 }
 
 // ============================================================================
+// Circuit Breaker Implementation
+// ============================================================================
+
+class CircuitBreaker {
+  private state: CircuitBreakerState
+  private readonly config: CircuitBreakerConfig
+  private failureTimestamps: number[] = [] // Track recent failure times
+
+  constructor(config: CircuitBreakerConfig) {
+    this.config = config
+    this.state = {
+      state: "closed",
+      failureCount: 0,
+      lastFailureTime: null,
+      lastStateChange: new Date(),
+      nextAttemptTime: null
+    }
+  }
+
+  /**
+   * Execute an operation through the circuit breaker
+   * Throws an error if the circuit is open
+   */
+  async execute<T>(operation: () => Promise<T>, serviceId: string): Promise<T> {
+    // Check if we should allow the request
+    if (!this.allowRequest()) {
+      const waitTime = this.state.nextAttemptTime
+        ? Math.max(0, this.state.nextAttemptTime.getTime() - Date.now())
+        : this.config.resetTimeout
+      throw new ApiError(
+        ApiErrorType.SERVER_ERROR,
+        serviceId,
+        `Circuit breaker is OPEN for ${serviceId}. Too many failures. Please wait ${Math.ceil(waitTime / 1000)} seconds before retrying.`
+      )
+    }
+
+    try {
+      const result = await operation()
+      this.onSuccess()
+      return result
+    } catch (error) {
+      this.onFailure()
+      throw error
+    }
+  }
+
+  /**
+   * Check if the request should be allowed based on circuit state
+   */
+  private allowRequest(): boolean {
+    const now = Date.now()
+
+    // Clean up old failure timestamps outside monitoring period
+    this.failureTimestamps = this.failureTimestamps.filter(
+      timestamp => now - timestamp < this.config.monitoringPeriod
+    )
+
+    switch (this.state.state) {
+      case "closed":
+        // In closed state, check if we've exceeded the threshold
+        return true
+
+      case "open":
+        // In open state, check if reset timeout has passed
+        if (this.state.nextAttemptTime && now >= this.state.nextAttemptTime.getTime()) {
+          this.transitionTo("half-open")
+          return true
+        }
+        return false
+
+      case "half-open":
+        // In half-open state, allow a single request to test
+        return true
+
+      default:
+        return true
+    }
+  }
+
+  /**
+   * Handle successful operation
+   */
+  private onSuccess(): void {
+    if (this.state.state === "half-open") {
+      this.transitionTo("closed")
+    }
+    // Reset failure count on success
+    this.state.failureCount = 0
+    this.failureTimestamps = []
+  }
+
+  /**
+   * Handle failed operation
+   */
+  private onFailure(): void {
+    const now = Date.now()
+    this.state.lastFailureTime = new Date(now)
+    this.failureTimestamps.push(now)
+
+    // Clean up old timestamps
+    this.failureTimestamps = this.failureTimestamps.filter(
+      timestamp => now - timestamp < this.config.monitoringPeriod
+    )
+
+    this.state.failureCount = this.failureTimestamps.length
+
+    // Check if we should open the circuit
+    if (this.state.failureCount >= this.config.failureThreshold) {
+      this.transitionTo("open")
+    }
+  }
+
+  /**
+   * Transition to a new circuit state
+   */
+  private transitionTo(newState: CircuitState): void {
+    const now = new Date()
+    this.state.state = newState
+    this.state.lastStateChange = now
+
+    if (newState === "open") {
+      // Set next attempt time based on reset timeout
+      this.state.nextAttemptTime = new Date(now.getTime() + this.config.resetTimeout)
+    } else if (newState === "closed") {
+      this.state.nextAttemptTime = null
+      this.state.failureCount = 0
+      this.failureTimestamps = []
+    }
+  }
+
+  /**
+   * Get current circuit state
+   */
+  getState(): CircuitBreakerState {
+    return { ...this.state }
+  }
+
+  /**
+   * Manually reset the circuit breaker to closed state
+   */
+  reset(): void {
+    this.state = {
+      state: "closed",
+      failureCount: 0,
+      lastFailureTime: null,
+      lastStateChange: new Date(),
+      nextAttemptTime: null
+    }
+    this.failureTimestamps = []
+  }
+}
+
+// ============================================================================
+// Retry Logic Implementation
+// ============================================================================
+
+class RetryHandler {
+  private readonly config: RetryConfig
+
+  constructor(config: RetryConfig) {
+    this.config = config
+  }
+
+  /**
+   * Execute an operation with retry logic
+   */
+  async execute<T>(
+    operation: () => Promise<T>,
+    serviceId: string,
+    abortSignal?: AbortSignal
+  ): Promise<T> {
+    let lastError: unknown
+
+    for (let attempt = 0; attempt <= this.config.maxRetries; attempt++) {
+      try {
+        return await operation()
+      } catch (error) {
+        lastError = error
+
+        // Check if we should retry
+        if (attempt < this.config.maxRetries && this.shouldRetry(error)) {
+          const delay = this.calculateBackoff(attempt)
+          console.warn(
+            `[RetryHandler] ${serviceId} request failed (attempt ${attempt + 1}/${this.config.maxRetries + 1}). Retrying in ${delay}ms...`,
+            error instanceof Error ? error.message : error
+          )
+
+          // Wait before retry, but check for abort signal
+          await this.waitWithAbort(delay, abortSignal)
+
+          continue
+        }
+
+        // Don't retry on final attempt or non-retryable errors
+        throw error
+      }
+    }
+
+    // This should never be reached, but TypeScript needs it
+    throw lastError
+  }
+
+  /**
+   * Check if an error is retryable
+   */
+  private shouldRetry(error: unknown): boolean {
+    if (error instanceof ApiError) {
+      return error.type === ApiErrorType.TIMEOUT ||
+             error.type === ApiErrorType.SERVER_ERROR ||
+             error.type === ApiErrorType.NETWORK_ERROR
+    }
+
+    if (error instanceof TypeError) {
+      // Network errors (e.g., fetch failed)
+      return error.message.includes("fetch") ||
+             error.message.includes("network") ||
+             error.message.includes("ECONNREFUSED")
+    }
+
+    return false
+  }
+
+  /**
+   * Calculate exponential backoff delay
+   */
+  private calculateBackoff(attempt: number): number {
+    const exponentialDelay = this.config.baseDelay * Math.pow(2, attempt)
+    // Add jitter to prevent thundering herd
+    const jitter = Math.random() * 0.3 * exponentialDelay
+    return Math.min(this.config.maxDelay, exponentialDelay + jitter)
+  }
+
+  /**
+   * Wait for specified duration, with abort signal support
+   */
+  private async waitWithAbort(delay: number, abortSignal?: AbortSignal): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => resolve(), delay)
+
+      abortSignal?.addEventListener("abort", () => {
+        clearTimeout(timeout)
+        reject(new Error("Retry aborted due to timeout"))
+      })
+    })
+  }
+}
+
+// ============================================================================
 // Cache Implementation
 // ============================================================================
 
@@ -240,6 +540,268 @@ class RateLimiter {
 }
 
 // ============================================================================
+// HTTP Fetch Wrapper with Timeout and Error Handling
+// ============================================================================
+
+class HttpFetcher {
+  private readonly defaultTimeout: number
+  private readonly circuitBreakers: Map<string, CircuitBreaker>
+  private readonly retryHandler: RetryHandler
+
+  constructor(defaultTimeout: number = 10000) {
+    this.defaultTimeout = defaultTimeout
+    this.circuitBreakers = new Map()
+    this.retryHandler = new RetryHandler({
+      maxRetries: 3,
+      baseDelay: 100,
+      maxDelay: 400,
+      retryableStatusCodes: new Set([408, 429, 500, 502, 503, 504]),
+      retryableErrors: new Set(["ECONNRESET", "ETIMEDOUT", "ENOTFOUND"])
+    })
+
+    // Initialize circuit breakers for different services
+    this.circuitBreakers.set("openweathermap", new CircuitBreaker({
+      failureThreshold: 5,
+      resetTimeout: 60000, // 1 minute
+      monitoringPeriod: 30000 // 30 seconds
+    }))
+
+    this.circuitBreakers.set("googleplaces", new CircuitBreaker({
+      failureThreshold: 5,
+      resetTimeout: 60000, // 1 minute
+      monitoringPeriod: 30000 // 30 seconds
+    }))
+
+    this.circuitBreakers.set("booking", new CircuitBreaker({
+      failureThreshold: 3,
+      resetTimeout: 90000, // 1.5 minutes
+      monitoringPeriod: 45000 // 45 seconds
+    }))
+  }
+
+  /**
+   * Fetch with timeout, retry, and circuit breaker protection
+   */
+  async fetch(
+    url: string,
+    options: RequestInit = {},
+    serviceId: string,
+    timeout: number = this.defaultTimeout
+  ): Promise<Response> {
+    const circuitBreaker = this.circuitBreakers.get(serviceId)
+    if (!circuitBreaker) {
+      throw new Error(`Unknown service ID: ${serviceId}`)
+    }
+
+    // Execute through circuit breaker
+    return circuitBreaker.execute(async () => {
+      return this.retryHandler.execute(
+        () => this.fetchWithTimeout(url, options, timeout, serviceId),
+        serviceId,
+        options.signal ?? undefined
+      )
+    }, serviceId)
+  }
+
+  /**
+   * Fetch with timeout and comprehensive error handling
+   */
+  private async fetchWithTimeout(
+    url: string,
+    options: RequestInit = {},
+    timeout: number,
+    serviceId: string
+  ): Promise<Response> {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), timeout)
+
+    try {
+      // Combine abort signals if provided
+      const signal = options.signal
+        ? this.combineAbortSignals([controller.signal, options.signal])
+        : controller.signal
+
+      const response = await fetch(url, {
+        ...options,
+        signal
+      })
+
+      clearTimeout(timeoutId)
+
+      // Handle HTTP errors with comprehensive error messages
+      if (!response.ok) {
+        await this.handleHttpError(response, serviceId, url)
+      }
+
+      return response
+    } catch (error) {
+      clearTimeout(timeoutId)
+
+      // Handle different error types
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new ApiError(
+          ApiErrorType.TIMEOUT,
+          serviceId,
+          `Request timeout after ${timeout}ms. Please check your connection and try again.`,
+          error
+        )
+      }
+
+      if (error instanceof TypeError && error.message.includes("fetch")) {
+        throw new ApiError(
+          ApiErrorType.NETWORK_ERROR,
+          serviceId,
+          `Network error. Please check your internet connection and try again.`,
+          error
+        )
+      }
+
+      throw error
+    }
+  }
+
+  /**
+   * Handle HTTP error responses with comprehensive error messages
+   */
+  private async handleHttpError(response: Response, serviceId: string, url: string): Promise<never> {
+    let errorMessage = response.statusText
+    let errorType: ApiErrorType
+
+    try {
+      // Try to get more details from response body
+      const clone = response.clone()
+      const body = await clone.json()
+
+      // Parse error messages from different APIs
+      if (serviceId === "openweathermap") {
+        errorMessage = body.message || errorMessage
+        if (body.cod === 429) {
+          errorType = ApiErrorType.QUOTA_EXCEEDED
+        }
+      } else if (serviceId === "googleplaces") {
+        errorMessage = body.error_message || errorMessage
+        if (body.status === "OVER_QUERY_LIMIT") {
+          errorType = ApiErrorType.QUOTA_EXCEEDED
+        }
+      }
+    } catch {
+      // If parsing fails, use status text
+    }
+
+    // Determine error type based on status code
+    switch (response.status) {
+      case 401:
+      case 403:
+        errorType = ApiErrorType.UNAUTHORIZED
+        errorMessage = this.getUnauthorizedMessage(serviceId)
+        break
+
+      case 429:
+        errorType = ApiErrorType.QUOTA_EXCEEDED
+        errorMessage = this.getQuotaExceededMessage(serviceId)
+        break
+
+      case 408:
+      case 504:
+        errorType = ApiErrorType.TIMEOUT
+        break
+
+      case 500:
+      case 502:
+      case 503:
+        errorType = ApiErrorType.SERVER_ERROR
+        errorMessage = `The ${serviceId} service is currently experiencing issues. Please try again later.`
+        break
+
+      default:
+        errorType = ApiErrorType.UNKNOWN
+    }
+
+    throw new ApiError(
+      errorType,
+      serviceId,
+      `${serviceId} API error (${response.status}): ${errorMessage}`,
+      { status: response.status, statusText: response.statusText, url }
+    )
+  }
+
+  /**
+   * Get comprehensive unauthorized error message
+   */
+  private getUnauthorizedMessage(serviceId: string): string {
+    switch (serviceId) {
+      case "openweathermap":
+        return "Invalid OpenWeatherMap API key. Please check your API key configuration in settings."
+      case "googleplaces":
+        return "Invalid Google Places API key. Please check your API key configuration in settings. Also verify that the Places API is enabled in your Google Cloud Console."
+      case "booking":
+        return "Invalid Booking API key. Please check your API key configuration."
+      default:
+        return "Invalid API key. Please check your API key configuration in settings."
+    }
+  }
+
+  /**
+   * Get comprehensive quota exceeded error message
+   */
+  private getQuotaExceededMessage(serviceId: string): string {
+    switch (serviceId) {
+      case "openweathermap":
+        return "OpenWeatherMap API quota exceeded. Your free tier limit has been reached. Please upgrade your plan or wait for the quota to reset (typically daily)."
+      case "googleplaces":
+        return "Google Places API quota exceeded. You have reached your request limit. Please check your Google Cloud Console for billing details and quota limits."
+      case "booking":
+        return "Booking API quota exceeded. Please check your API usage limits."
+      default:
+        return "API quota exceeded. Please check your service plan and usage limits."
+    }
+  }
+
+  /**
+   * Combine multiple abort signals into a single signal
+   * Aborts if any of the signals abort
+   */
+  private combineAbortSignals(signals: AbortSignal[]): AbortSignal {
+    const controller = new AbortController()
+
+    for (const signal of signals) {
+      if (signal.aborted) {
+        controller.abort()
+        break
+      }
+      signal.addEventListener("abort", () => controller.abort(), { once: true })
+    }
+
+    return controller.signal
+  }
+
+  /**
+   * Get circuit breaker state for monitoring
+   */
+  getCircuitBreakerState(serviceId: string): CircuitBreakerState | null {
+    const breaker = this.circuitBreakers.get(serviceId)
+    return breaker ? breaker.getState() : null
+  }
+
+  /**
+   * Reset a specific circuit breaker
+   */
+  resetCircuitBreaker(serviceId: string): void {
+    const breaker = this.circuitBreakers.get(serviceId)
+    breaker?.reset()
+  }
+
+  /**
+   * Reset all circuit breakers
+   */
+  resetAllCircuitBreakers(): void {
+    for (const breaker of this.circuitBreakers.values()) {
+      breaker.reset()
+    }
+  }
+}
+
+// ============================================================================
 // External API Service
 // NO MOCK DATA - All data must come from real APIs or LLM
 // ============================================================================
@@ -249,13 +811,20 @@ class ExternalApiService {
   private weatherRateLimiter = new RateLimiter(60, 60) // 60 requests per minute
   private placesRateLimiter = new RateLimiter(100, 100) // 100 requests per 100 seconds
   private hotelRateLimiter = new RateLimiter(50, 10) // 50 requests per 10 seconds
+  private httpFetcher: HttpFetcher
 
   // API Keys (from environment variables or runtime configuration)
   private openWeatherApiKey: string | undefined
   private googlePlacesApiKey: string | undefined
   private bookingApiKey: string | undefined
 
+  // Default timeout for API requests (10 seconds)
+  private static readonly DEFAULT_TIMEOUT = 10000
+
   constructor() {
+    // Initialize HTTP fetcher with timeout and circuit breaker
+    this.httpFetcher = new HttpFetcher(ExternalApiService.DEFAULT_TIMEOUT)
+
     // Try to load from global first (set by apiConfigService)
     this.openWeatherApiKey = (globalThis as any).__OPENWEATHER_API_KEY__
     this.googlePlacesApiKey = (globalThis as any).__GOOGLE_PLACES_API_KEY__
@@ -312,23 +881,15 @@ class ExternalApiService {
   }
 
   private async fetchWeatherFromAPI(city: string): Promise<WeatherData> {
-    // Get current weather
+    // Get current weather with timeout, retry, and circuit breaker
     const currentUrl = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&appid=${this.openWeatherApiKey}&units=metric&lang=zh_cn`
-    const currentResponse = await fetch(currentUrl)
-
-    if (!currentResponse.ok) {
-      throw new Error(`Weather API error: ${currentResponse.statusText}`)
-    }
+    const currentResponse = await this.httpFetcher.fetch(currentUrl, {}, "openweathermap", ExternalApiService.DEFAULT_TIMEOUT)
 
     const currentData = (await currentResponse.json()) as OpenWeatherResponse
 
-    // Get 5-day forecast
+    // Get 5-day forecast with timeout, retry, and circuit breaker
     const forecastUrl = `https://api.openweathermap.org/data/2.5/forecast?q=${encodeURIComponent(city)}&appid=${this.openWeatherApiKey}&units=metric&lang=zh_cn`
-    const forecastResponse = await fetch(forecastUrl)
-
-    if (!forecastResponse.ok) {
-      throw new Error(`Weather forecast API error: ${forecastResponse.statusText}`)
-    }
+    const forecastResponse = await this.httpFetcher.fetch(forecastUrl, {}, "openweathermap", ExternalApiService.DEFAULT_TIMEOUT)
 
     const forecastData = (await forecastResponse.json()) as OpenWeatherForecastResponse
 

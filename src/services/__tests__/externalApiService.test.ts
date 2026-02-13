@@ -3,14 +3,8 @@
  * Run with: npm test
  */
 
-// Note: Tests are disabled until vitest is added to devDependencies
-// To enable tests, run: npm install --save-dev vitest
-// Then uncomment the test code below
-
-/*
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { ExternalApiService, InMemoryCache, RateLimiter } from '../externalApiService'
-import type { WeatherData, Place, Hotel } from '../externalApiService'
 
 describe('InMemoryCache', () => {
   let cache: InMemoryCache
@@ -71,52 +65,37 @@ describe('RateLimiter', () => {
   })
 })
 
-describe('ExternalApiService (Mock Mode)', () => {
+describe('ExternalApiService', () => {
   let service: ExternalApiService
 
   beforeEach(() => {
     service = new ExternalApiService()
   })
 
-  it('should return mock weather when no API key is configured', async () => {
-    const weather = await service.getWeather('Tokyo')
-    expect(weather).toBeDefined()
-    expect(weather.city).toBe('Tokyo')
-    expect(weather.source).toBe('mock')
-    expect(weather.current).toBeDefined()
-    expect(weather.forecast).toBeDefined()
+  it('should throw error when no API key is configured for weather', async () => {
+    await expect(service.getWeather('Tokyo')).rejects.toThrow('OpenWeatherMap API key not configured')
   })
 
-  it('should return mock places when no API key is configured', async () => {
-    const places = await service.searchPlaces('attractions', 'Paris', 'attraction')
-    expect(Array.isArray(places)).toBe(true)
-    expect(places.length).toBeGreaterThan(0)
-    expect(places[0].source).toBe('mock')
+  it('should throw error when no API key is configured for places', async () => {
+    await expect(service.searchPlaces('attractions', 'Paris', 'attraction')).rejects.toThrow('Google Places API key not configured')
   })
 
-  it('should return mock hotels', async () => {
-    const hotels = await service.searchHotels('New York', {
+  it('should throw error when no API key is configured for hotels', async () => {
+    await expect(service.searchHotels('New York', {
       startDate: new Date(),
       endDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000)
-    })
-    expect(Array.isArray(hotels)).toBe(true)
-    expect(hotels.length).toBeGreaterThan(0)
-    expect(hotels[0].source).toBe('mock')
+    })).rejects.toThrow('Google Places API key not configured')
   })
 
-  it('should cache results', async () => {
-    // First call
-    await service.getWeather('London')
-    // Clear cache to verify it was cached
-    service.clearCache()
-    expect(service.getApiStatus().openWeatherMap).toBe(false)
-  })
-
-  it('should report API status correctly', () => {
+  it('should report API status correctly when no keys set', () => {
     const status = service.getApiStatus()
     expect(status).toHaveProperty('openWeatherMap')
     expect(status).toHaveProperty('googlePlaces')
     expect(status).toHaveProperty('booking')
+    // When no keys are set, all should be false
+    expect(status.openWeatherMap).toBe(false)
+    expect(status.googlePlaces).toBe(false)
+    expect(status.booking).toBe(false)
   })
 
   it('should set API keys', () => {
@@ -128,5 +107,10 @@ describe('ExternalApiService (Mock Mode)', () => {
     expect(status.openWeatherMap).toBe(true)
     expect(status.googlePlaces).toBe(true)
   })
+
+  it('should clear cache without errors', () => {
+    // Clear cache should not throw
+    expect(() => service.clearCache()).not.toThrow()
+  })
 })
-*/
+

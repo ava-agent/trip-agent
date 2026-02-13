@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm build)",
+      "Bash(npx tsc --help:*)",
+      "Bash(pnpm test:run)",
+      "Bash(npx tsc:*)"
+    ]
+  }
+}

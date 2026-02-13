@@ -5,7 +5,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { LLMService } from '../llmService'
-import { MultiAgentService } from '../multiAgentService'
+import { MultiAgentService, setLLMEnabled } from '../multiAgentService'
 import { isLLMAvailable } from '../multiAgentService'
 
 // Mock the LLM service to verify it's being called
@@ -23,6 +23,8 @@ describe('Trip Generation E2E Tests', () => {
       apiKey: 'test-key-for-e2e',
       model: 'glm-4-flash',
     })
+    // Enable LLM integration for tests
+    setLLMEnabled(true)
   })
 
   it('should initialize LLM service', () => {
