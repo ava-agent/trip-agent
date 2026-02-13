@@ -364,7 +364,8 @@ class ErrorServiceClass {
       ErrorCode.FETCH_FAILED,
       ErrorCode.TIMEOUT,
       ErrorCode.RATE_LIMIT_EXCEEDED,
-      ErrorCode.SERVER_ERROR
+      ErrorCode.SERVER_ERROR,
+      ErrorCode.SERVICE_UNAVAILABLE
     ].includes(code)
   }
 

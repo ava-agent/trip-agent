@@ -17,6 +17,7 @@ import {
 
 describe("ErrorService", () => {
   describe("report", () => {
+    it("should create error report with all properties", () => {
       const report = ErrorService.report(
         ErrorCode.NETWORK_ERROR,
         { url: "https://api.example.com" }
@@ -33,7 +34,8 @@ describe("ErrorService", () => {
       expect(report.recovery).toBeInstanceOf(Array)
     })
 
-    it("should include original error in report", () => {
+    it("should log original error to console", () => {
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {})
       const originalError = new Error("Original error message")
       const report = ErrorService.report(
         ErrorCode.FETCH_FAILED,
@@ -41,9 +43,16 @@ describe("ErrorService", () => {
         originalError
       )
 
-      expect(report.originalError).toBe(originalError)
+      expect(consoleSpy).toHaveBeenCalledWith(
+        "[ErrorService] FETCH_FAILED:",
+        expect.objectContaining({
+          code: ErrorCode.FETCH_FAILED,
+          originalError
+        })
+      )
       expect(report.category).toBe(ErrorCategory.NETWORK)
-      expect(report.message).toBe("Network connection failed")
+      expect(report.message).toBe("Failed to fetch data")
+      consoleSpy.mockRestore()
     })
 
     it("should add error to internal history", () => {
