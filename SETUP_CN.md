@@ -7,70 +7,58 @@
 ✅ **所有更改已推送到 GitHub**
 ✅ **Tauri 配置已修复** (bundle identifier 问题已解决)
 
-## 桌面应用安装
+## 如何使用桌面应用
 
-### 方式一：使用预编译版本（推荐）
+### 方式一：使用在线 Web 版本（推荐）✨
 
-由于您的系统未安装 Rust，**推荐使用预编译版本**：
+**最简单方式 - 无需安装！**
 
-1. **下载最新版本**
-   - 访问：https://github.com/ava-agent/trip-agent/releases
-   - 下载最新版本的 `Trip.Agent.Setup.exe` (Windows) 或 `Trip.Agent.dmg` (macOS)
+1. **访问在线应用**
+   - 打开浏览器访问：https://ava-agent.dev
+   - 应用界面与桌面版完全相同
+   - 无需安装任何软件
+   - 支持所有现代浏览器（Chrome、Edge、Firefox、Safari）
+   - **自动更新** - 应用始终保持最新版本
 
-2. **运行安装程序**
-   - Windows: 双击 `Trip.Agent.Setup.exe`
-   - macOS: 打开 `Trip.Agent.dmg` 并拖拽到应用程序文件夹
-   - Linux: 运行 `Trip.Agent.AppImage`
-
-3. **完成**
-   - 应用程序安装后，会自动启动
-   - 在设置中配置 API 密钥即可开始使用
+2. **开始使用**
+   - 直接打开应用即可开始规划您的旅行
+   - 在设置中配置 API 密钥（智谱 AI GLM API）
+   - 输入目的地、天数等信息，系统自动生成完整行程
 
 ---
 
-### 方式二：从源码构建（高级用户）
+### 方式二：从源码构建（高级用户）⚙️
 
-如果您已安装 Node.js 和 npm，可以从源码构建：
+**注意**：此方式需要安装 Node.js 和 Rust，适合开发者用户。
 
-#### 1. 安装 Rust（必需）
+如果您已安装开发环境：
 
-**Windows 系统：**
+#### Windows 系统
 ```bash
-# 访问以下网址下载 Rust
+# 安装 Rust（如果未安装）
 https://www.rust-lang.org/tools/install.html
 
-# 运行下载的安装程序
-# 按照提示完成安装
+# 克隆项目
+git clone https://github.com/ava-agent/trip-agent.git
+cd trip-agent
+
+# 安装项目依赖
+npm install
 ```
 
-**macOS 系统：**
+#### macOS 系统
 ```bash
+# 安装 Rust
 curl --proto '=https' https://sh.rustup.rs | sh -s -- -y
 source $HOME/.cargo/env
 ```
 
-#### 2. 安装项目依赖
-
-```bash
-# 进入项目目录
-cd trip-agent
-
-# 安装 Node.js 依赖
-npm install
-```
-
-#### 3. 构建桌面应用
-
+#### 构建和运行应用
 ```bash
 # 构建 Tauri 应用
 npm run tauri build
-```
 
-#### 4. 运行应用
-
-**Windows：**
-```bash
-# 运行开发服务器（可选）
+# 运行开发服务器
 npm run tauri dev
 ```
 
@@ -78,7 +66,7 @@ npm run tauri dev
 
 ## 配置 API 密钥
 
-应用启动后，需要在设置中配置以下 API 密钥：
+应用启动后，在设置中配置以下 API 密钥：
 
 1. **智谱 AI GLM API**（必需）- 用于行程生成
 2. **OpenWeatherMap API**（可选）- 用于天气数据
@@ -122,17 +110,10 @@ npm run tauri dev
 ## 项目链接
 
 - **GitHub**: https://github.com/ava-agent/trip-agent
-- **在线文档**: 完整的 README.md
+- **在线应用**: https://ava-agent.dev
 
 ---
 
 ## 许可证
 
 MIT License
-
----
-
-**注意**:
-- 确保您的系统已安装 Node.js (v18+) 和 npm
-- 如遇构建问题，推荐使用预编译版本（方式一）
-- Windows 用户需要以管理员身份运行安装程序
