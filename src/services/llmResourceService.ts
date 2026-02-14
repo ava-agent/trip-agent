@@ -222,6 +222,38 @@ const PROMPTS = {
       role: "user",
       content: `请推荐 ${destination} 的特色餐厅。`
     }
+  ],
+
+  /**
+   * 交通信息生成提示词
+   */
+  TRANSPORT: (from: string, to: string, destination: string): LLMMessage[] => [
+    {
+      role: "system",
+      content: `你是一个专业的交通信息服务。请根据起点和终点，生成两地之间的交通信息。
+
+请严格按照以下 JSON 格式返回，不要添加任何其他文字：
+\`\`\`json
+{
+  "from": "起点名称",
+  "to": "终点名称",
+  "duration": "预计耗时(如: 30分钟)",
+  "cost": "预计费用(如: 200日元)",
+  "method": "交通方式(如: 地铁/公交/出租车/步行)",
+  "instructions": ["步骤1", "步骤2", "步骤3"]
+}
+\`\`\`
+
+注意：
+1. 时间估算要合理，考虑当地交通状况
+2. 费用要符合当地消费水平
+3. 交通指引要具体可操作
+4. 优先推荐公共交通`
+    },
+    {
+      role: "user",
+      content: `请生成从 ${from} 到 ${to} 的交通信息（目的地：${destination}）。`
+    }
   ]
 }
 
@@ -424,6 +456,37 @@ export class LLMResourceService {
     } catch (error) {
       console.error("[LLMResourceService] Restaurants generation failed:", error)
       return []
+    }
+  }
+
+  /**
+   * 生成交通信息
+   */
+  static async generateTransportInfo(
+    from: string,
+    to: string,
+    destination: string
+  ): Promise<{
+    from: string
+    to: string
+    duration: string
+    cost: string
+    method: string
+    instructions: string[]
+  } | null> {
+    if (!this.isAvailable()) {
+      console.warn("[LLMResourceService] GLM not configured")
+      return null
+    }
+
+    const messages = PROMPTS.TRANSPORT(from, to, destination)
+
+    try {
+      const response = await LLMService.chatCompletion(messages)
+      return safeParseJSON(response, null)
+    } catch (error) {
+      console.error("[LLMResourceService] Transport generation failed:", error)
+      return null
     }
   }
 

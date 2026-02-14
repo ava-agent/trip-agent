@@ -36,7 +36,7 @@ let useLLM = false
 try {
   useLLM = initializeLLMFromEnv()
 } catch {
-  // Silently fail - will use mock responses
+  // Silently fail - LLM service not configured
 }
 
 /**
@@ -240,7 +240,6 @@ class SupervisorAgent {
     return messages
   }
 
-  // REMOVED: processWithMock method - all data must come from LLM, no fallback
 }
 
 /**
@@ -326,7 +325,7 @@ class PlannerAgent {
     } catch (error) {
       messages.push({
         agent: "planner",
-        content: `⚠️ LLM 调用失败，使用备用规划`,
+        content: `⚠️ LLM 调用失败`,
         timestamp: new Date(),
         type: "error",
       })
@@ -335,10 +334,6 @@ class PlannerAgent {
 
     return messages
   }
-
-  // REMOVED: processWithMock method - all data must come from LLM or external APIs
-  // REMOVED: getDestinationAttractions - preset attraction data removed
-  // REMOVED: delay method - was only for mock
 }
 
 /**
@@ -500,47 +495,34 @@ class RecommenderAgent {
   }
 
   private static filterHotelsByPreference(hotels: Hotel[], preferences?: UserPreferences): Hotel[] {
-    // No mock fallback - return empty array if no hotels available
     if (!hotels.length) {
       return []
     }
 
-    // Filter by price level based on accommodation type
     const accType = preferences?.accommodationType?.[0] || "mid-range"
-    const priceLevelMap: Record<string, number[]> = {
-      budget: [0, 1],
-      "mid-range": [1, 2, 3],
-      luxury: [3, 4],
+    const priceRanges: Record<string, { min: number; max: number }> = {
+      budget: { min: 0, max: 500 },
+      "mid-range": { min: 200, max: 1500 },
+      luxury: { min: 1000, max: Infinity },
     }
-
-    void (accType)
-    void (priceLevelMap)
+    const range = priceRanges[accType] || priceRanges["mid-range"]
 
     return hotels.filter(h => {
-      if (!h.price_per_night) return true
-      // Simple filtering logic - can be enhanced
-      return true
+      if (!h.price_per_night?.amount) return true
+      return h.price_per_night.amount >= range.min && h.price_per_night.amount <= range.max
     })
   }
 
-  private static filterRestaurantsByPreferences(restaurants: Place[], preferences?: UserPreferences): Place[] {
-    // No mock fallback - return empty array if no restaurants available
+  private static filterRestaurantsByPreferences(restaurants: Place[], _preferences?: UserPreferences): Place[] {
     if (!restaurants.length) {
       return []
     }
 
-    // Filter by dietary restrictions if specified
-    const dietaryRestrictions = preferences?.dietaryRestrictions || []
-    if (dietaryRestrictions.length === 0) {
-      return restaurants
-    }
-
-    // For now, return all restaurants as dietary filtering would require more API data
-    return restaurants
+    // Sort by rating (highest first) and return top results
+    return [...restaurants]
+      .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))
+      .slice(0, 10)
   }
-
-  // REMOVED: getPersonalizedHotels - preset hotel names removed
-  // REMOVED: getPersonalizedRestaurants - preset restaurant names removed
 }
 
 /**
@@ -573,7 +555,6 @@ class BookingAgent {
       timestamp: new Date(),
       type: "action",
     })
-    // Removed artificial delay - process without delay
 
     useAgentProgressStore.getState().completeToolCall(checkAvailabilityToolId, { available: true })
 
@@ -604,7 +585,7 @@ class BookingAgent {
 
     messages.push({
       agent: "booking",
-      content: "✓ 价格对比: 携程 ¥2,800 | 飞猪 ¥2,750 | 去哪儿 ¥2,720",
+      content: "✓ 模拟比价: 携程 ¥2,800 | 飞猪 ¥2,750 | 去哪儿 ¥2,720（示例数据）",
       timestamp: new Date(),
       type: "result",
     })
@@ -671,7 +652,6 @@ class DocumentAgent {
       timestamp: new Date(),
       type: "action",
     })
-    // Removed artificial delay - process without delay
 
     useAgentProgressStore.getState().completeToolCall(formatItineraryToolId, { formatted: true })
     useAgentProgressStore.getState().completePhase("document")
@@ -721,7 +701,7 @@ export class MultiAgentService {
   > {
     const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
-    console.log('[MultiAgentService] Starting agent processing for:', context.userMessage)
+
 
     // A2UI: Validate context first
     const validation = contextValidator.validateFromMessage(
@@ -733,8 +713,6 @@ export class MultiAgentService {
     // If context is incomplete, yield questions
     if (!validation.isComplete) {
       const questions = questionGenerator.generateFromMissingInfo(validation.missingInfo)
-      console.log('[MultiAgentService] Context incomplete, yielding questions:', questions.questions.map(q => q.field))
-      console.log('[MultiAgentService] Extracted context from validation:', validation.context)
       yield {
         type: 'need_more_info' as const,
         questions: questions.questions,
@@ -743,7 +721,7 @@ export class MultiAgentService {
       return  // Early return to wait for user answers
     }
 
-    console.log('[MultiAgentService] Context validated, proceeding with agent processing')
+
 
     // Merge existingContext into the agent context
     const enhancedContext: AgentContext = {
@@ -753,9 +731,7 @@ export class MultiAgentService {
 
     // Phase 1: Supervisor analysis
     const supervisorMessages = await SupervisorAgent.process(enhancedContext)
-    console.log('[MultiAgentService] Supervisor returned', supervisorMessages.length, 'messages')
     for (const msg of supervisorMessages) {
-      console.log('[MultiAgentService] Yielding supervisor message:', msg.content.substring(0, 50))
       yield { message: msg }
       // Small delay between messages for visibility
       await delay(300)
@@ -764,40 +740,31 @@ export class MultiAgentService {
     // Determine which agents to call
     const intent = analyzeIntent(enhancedContext.userMessage)
     const agentsToCall = intent.agents as AgentRole[]
-    console.log('[MultiAgentService] Agents to call:', agentsToCall)
+
 
     // Phase 2: Execute specialist agents in sequence
     for (const agentRole of agentsToCall) {
-      console.log('[MultiAgentService] Executing agent:', agentRole)
       if (agentRole === "planner") {
         const plannerMessages = await PlannerAgent.process(enhancedContext)
-        console.log('[MultiAgentService] Planner returned', plannerMessages.length, 'messages')
         for (const msg of plannerMessages) {
-          console.log('[MultiAgentService] Yielding planner message:', msg.content.substring(0, 50))
           yield { message: msg }
           await delay(400)
         }
       } else if (agentRole === "recommender") {
         const recommenderMessages = await RecommenderAgent.process(enhancedContext)
-        console.log('[MultiAgentService] Recommender returned', recommenderMessages.length, 'messages')
         for (const msg of recommenderMessages) {
-          console.log('[MultiAgentService] Yielding recommender message:', msg.content.substring(0, 50))
           yield { message: msg }
           await delay(400)
         }
       } else if (agentRole === "booking") {
         const bookingMessages = await BookingAgent.process(enhancedContext)
-        console.log('[MultiAgentService] Booking returned', bookingMessages.length, 'messages')
         for (const msg of bookingMessages) {
-          console.log('[MultiAgentService] Yielding booking message:', msg.content.substring(0, 50))
           yield { message: msg }
           await delay(400)
         }
       } else if (agentRole === "document") {
         const documentMessages = await DocumentAgent.process(enhancedContext)
-        console.log('[MultiAgentService] Document returned', documentMessages.length, 'messages')
         for (const msg of documentMessages) {
-          console.log('[MultiAgentService] Yielding document message:', msg.content.substring(0, 50))
           yield { message: msg }
           await delay(400)
         }
@@ -805,7 +772,7 @@ export class MultiAgentService {
     }
 
     // Phase 3: Final summary
-    console.log('[MultiAgentService] Yielding final summary with done=true')
+
 
     // Complete the agent progress session
     useAgentProgressStore.getState().completeSession()
@@ -835,7 +802,7 @@ export class MultiAgentService {
     const destinationName = destination || "未指定"
     const tripName = destination ? `${destination}${days}日游` : `${days}日游`
 
-    console.log('[MultiAgentService] Generating trip with LLM for:', destinationName, days, 'days')
+
 
     // Generate with LLM - no mock fallback
     const itinerary = await this.generateItineraryWithLLM(destinationName, days, context.userPreferences)
@@ -919,7 +886,7 @@ export class MultiAgentService {
     ]
 
     const response = await LLMService.chatCompletion(llmMessages)
-    console.log('[MultiAgentService] LLM response length:', response.length)
+
 
     // Parse LLM response to JSON
     const itineraryData = this.parseItineraryFromResponse(response)
@@ -935,7 +902,7 @@ export class MultiAgentService {
                      response.match(/\[[\s\S]*\](?=\s*$)/)
 
     if (!jsonMatch) {
-      console.warn('[MultiAgentService] Could not extract JSON from LLM response')
+
       throw new Error('Failed to parse LLM response')
     }
 
@@ -970,5 +937,5 @@ export class MultiAgentService {
     })
   }
 
-  // REMOVED: generateMockItinerary - all data must come from LLM
+
 }

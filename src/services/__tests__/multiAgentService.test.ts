@@ -377,7 +377,7 @@ describe("MultiAgentService Orchestrator", () => {
 
       const trip1 = await MultiAgentService.generateTripFromContext(context)
       // Small delay to ensure different timestamp
-      await new Promise(resolve => setTimeout(resolve, 1))
+      await new Promise(resolve => setTimeout(resolve, 10))
       const trip2 = await MultiAgentService.generateTripFromContext(context)
 
       expect(trip1.id).not.toBe(trip2.id)

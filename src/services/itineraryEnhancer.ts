@@ -128,10 +128,12 @@ export class ItineraryEnhancer {
       const dayDate = new Date(startDate)
       dayDate.setDate(dayDate.getDate() + i)
 
+      const dayWeather = weatherData.find(w => w.date === dayDate.toISOString().split('T')[0])
+
       const enhancedDay: EnhancedDayPlan = {
         ...day,
-        weather: weatherData.find(w => w.date === dayDate.toISOString().split('T')[0]),
-        enhancedActivities: await this.enhanceActivities(day.activities, destination, attractionData),
+        weather: dayWeather,
+        enhancedActivities: await this.enhanceActivities(day.activities, destination, attractionData, dayWeather),
         transportSuggestions: await this.fetchTransportInfo(day.activities, destination)
       }
 
@@ -153,7 +155,8 @@ export class ItineraryEnhancer {
   private static async enhanceActivities(
     activities: Activity[],
     _destination: string,
-    attractionData: AttractionData[]
+    attractionData: AttractionData[],
+    dayWeather?: WeatherData
   ): Promise<EnhancedActivity[]> {
     return Promise.all(
       activities.map(async (activity) => {
@@ -168,7 +171,7 @@ export class ItineraryEnhancer {
           ...activity,
           placeDetails: placeInfo,
           crowdLevel: await this.predictCrowdLevel(locationName, activity.time.start),
-          weatherSuitability: this.assessWeatherSuitability(activity)
+          weatherSuitability: this.assessWeatherSuitability(activity, dayWeather)
         }
       })
     )
@@ -347,23 +350,16 @@ export class ItineraryEnhancer {
           status: 'loading'
         })
 
-        // TODO: 实际调用交通 API
-        const mockTransport: TransportInfo = {
-          from,
-          to,
-          duration: '30 分钟',
-          cost: '200 日元',
-          method: '地铁',
-          instructions: ['从附近车站乘坐 JR 线', '换乘地铁银座线', '在目的地站下车']
-        }
+        // 生成交通信息（使用 LLM 生成更真实的数据）
+        const transportInfo = await this.generateTransportInfo(from, to, destination)
 
         useToolResultStore.getState().setResult(cacheKey, {
           toolName: 'transport',
-          result: mockTransport,
+          result: transportInfo,
           status: 'success'
         })
 
-        transports.push(mockTransport)
+        transports.push(transportInfo)
       } catch (error) {
         useToolResultStore.getState().setResult(cacheKey, {
           toolName: 'transport',
@@ -375,6 +371,94 @@ export class ItineraryEnhancer {
     }
 
     return transports
+  }
+
+  /**
+   * 生成交通信息
+   */
+  private static async generateTransportInfo(
+    from: string,
+    to: string,
+    destination: string
+  ): Promise<TransportInfo> {
+    // 使用 LLM 生成真实的交通信息
+    if (llmResourceService.isAvailable()) {
+      try {
+        const transportInfo = await llmResourceService.generateTransportInfo(from, to, destination)
+        if (transportInfo) {
+          return transportInfo
+        }
+      } catch (error) {
+        console.warn('[ItineraryEnhancer] LLM transport generation failed, using fallback:', error)
+      }
+    }
+
+    // 降级方案：基于距离估算
+    const estimatedDuration = this.estimateTransportDuration(from, to, destination)
+    const estimatedCost = this.estimateTransportCost(destination)
+
+    return {
+      from,
+      to,
+      duration: estimatedDuration.duration,
+      cost: estimatedCost.cost,
+      method: estimatedDuration.method,
+      instructions: this.generateTransportInstructions(from, to, estimatedDuration.method)
+    }
+  }
+
+  /**
+   * 估算交通时间和方式
+   */
+  private static estimateTransportDuration(
+    _from: string,
+    _to: string,
+    destination: string
+  ): { duration: string; method: string } {
+    // 基于目的地类型估算交通方式
+    const urbanDestinations = ['东京', '大阪', '京都', '上海', '北京', '巴黎', '伦敦']
+    const isUrban = urbanDestinations.some(d => destination.includes(d))
+
+    if (isUrban) {
+      return { duration: '20-40 分钟', method: '地铁/公交' }
+    }
+    return { duration: '30-60 分钟', method: '出租车/网约车' }
+  }
+
+  /**
+   * 估算交通费用
+   */
+  private static estimateTransportCost(destination: string): { cost: string } {
+    // 基于目的地消费水平估算
+    const highCostDestinations = ['东京', '大阪', '京都', '巴黎', '伦敦', '纽约']
+    const mediumCostDestinations = ['上海', '北京', '深圳', '广州']
+
+    if (highCostDestinations.some(d => destination.includes(d))) {
+      return { cost: '200-500 日元' }
+    }
+    if (mediumCostDestinations.some(d => destination.includes(d))) {
+      return { cost: '10-30 元' }
+    }
+    return { cost: '20-50 元' }
+  }
+
+  /**
+   * 生成交通指引
+   */
+  private static generateTransportInstructions(from: string, to: string, method: string): string[] {
+    if (method.includes('地铁')) {
+      return [
+        `从${from}附近找到最近地铁站`,
+        '查看线路图，确定换乘站点',
+        `前往${to}附近站点下车`,
+        '根据出口指引到达目的地'
+      ]
+    }
+    return [
+      `从${from}出发`,
+      `前往${to}`,
+      '预计到达时间请根据实际路况调整'
+    ]
   }
 
   /**
@@ -393,12 +477,58 @@ export class ItineraryEnhancer {
   /**
    * 评估天气适宜性
    */
-  private static assessWeatherSuitability(activity: Activity): 'excellent' | 'good' | 'fair' | 'poor' {
-    // 基于 activity 类型的简单评估
-    if (activity.type === 'attraction') {
-      return 'good' // TODO: 应该基于实际天气数据
+  private static assessWeatherSuitability(
+    activity: Activity,
+    weather?: WeatherData
+  ): 'excellent' | 'good' | 'fair' | 'poor' {
+    // 如果没有天气数据，基于活动类型简单评估
+    if (!weather) {
+      if (activity.type === 'attraction') {
+        return 'good'
+      }
+      return 'excellent'
     }
-    return 'excellent'
+
+    // 基于实际天气数据进行评估
+    const { temperature, precipitation, condition } = weather
+
+    // 降水概率高时，户外活动适宜性降低
+    if (precipitation > 60) {
+      if (activity.type === 'attraction') {
+        return 'poor'
+      }
+      return 'fair'
+    }
+
+    // 降水概率中等
+    if (precipitation > 30) {
+      if (activity.type === 'attraction') {
+        return 'fair'
+      }
+      return 'good'
+    }
+
+    // 温度评估
+    const avgTemp = (temperature.min + temperature.max) / 2
+    if (avgTemp > 35 || avgTemp < 0) {
+      // 极端温度
+      if (activity.type === 'attraction') {
+        return 'fair'
+      }
+      return 'good'
+    }
+
+    if (avgTemp > 30 || avgTemp < 5) {
+      // 不太舒适的温度
+      return 'good'
+    }
+
+    // 理想天气条件
+    if (condition.includes('晴') || condition.includes('多云')) {
+      return 'excellent'
+    }
+
+    return 'good'
   }
 }
 
