@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Trip Agent** is a desktop application built with React + TypeScript + Tauri that implements a sophisticated Multi-Agent system for intelligent travel planning. The system uses LLM APIs (primarily GLM-4-Flash) to generate personalized trip itineraries with real-time external data (weather, places, hotels).
+**Trip Agent** is an AI travel planning application built with React + TypeScript that implements a Multi-Agent system for intelligent itinerary generation. Supports both **web deployment** (Vercel + Supabase) and **desktop** (Tauri). Uses LLM APIs (GLM-4-Flash / OpenAI / Anthropic) with real-time external data (weather, places, hotels).
 
 ## Commands
 
@@ -19,14 +19,15 @@ pnpm lint            # Run ESLint
 ### Testing
 ```bash
 pnpm test            # Run tests in watch mode (Vitest)
-pnpm test:run        # Run tests once
+pnpm test:run        # Run tests once (415 tests)
 pnpm test:ui         # Run tests with UI
 pnpm test:coverage   # Run tests with coverage report
 ```
 
-### Desktop Build
+### Deployment
 ```bash
-pnpm tauri build     # Build desktop application
+vercel deploy --prod --yes   # Deploy to Vercel
+pnpm tauri build             # Build desktop application
 ```
 
 ## Architecture
@@ -56,32 +57,64 @@ The core architecture is a **Multi-Agent orchestration system** in `src/services
   - Phases have status: `pending` | `in_progress` | `completed` | `failed` | `skipped`
   - Tool calls track: input, output, status, duration, error
 - **`chatStore`**: Manages conversation history
-- **`tripStore`**: Manages trip data
+- **`tripStore`**: Manages trip data (localStorage fallback + Supabase for web)
 - **`sessionStore`**: Handles user sessions
 
 ### Key Services
 
-- **`llmService.ts`**: LLM API integration with multiple providers (GLM, OpenAI, Anthropic)
-- **`externalApiService.ts`**: External API wrappers (OpenWeatherMap, Google Places)
+- **`llmService.ts`**: LLM API integration with multiple providers (GLM, OpenAI, Anthropic, proxy mode)
+- **`externalApiService.ts`**: External API wrappers (OpenWeatherMap, Google Places) with proxy support
 - **`streamService.ts`**: Real-time streaming for agent responses
 - **`exportService.ts`**: PDF/Markdown itinerary export
 
 ### A2UI (Agent-to-User Interface)
 
-- **Context Validation**: `src/services/contextValidator.ts` - Validates trip planning context
+- **Context Validation**: `src/services/contextValidator.ts` - Validates trip planning context (1-365 days)
 - **Question Generation**: `src/services/questionGenerator.ts` - Generates follow-up questions for missing info
 - The system proactively collects missing information (destination, days, budget, preferences) before starting agents
 
+## Deployment
+
+### Web (Vercel + Supabase)
+
+**Production URL**: https://trip-agent-rho.vercel.app
+
+**Architecture**:
+- Frontend SPA deployed to Vercel CDN
+- API proxy routes (`api/llm.ts`, `api/weather.ts`, `api/places.ts`) as Vercel Edge Functions
+- Supabase PostgreSQL for data persistence with RLS
+- API keys stored server-side in Vercel env vars (not exposed to browser)
+
+**Vercel Environment Variables**:
+| Variable | Purpose |
+|----------|---------|
+| `GLM_API_KEY` | Server-side LLM API key |
+| `VITE_SUPABASE_URL` | Supabase project URL |
+| `VITE_SUPABASE_ANON_KEY` | Supabase anon key (safe for browser, RLS protected) |
+
+**Proxy Mode**: In production (`import.meta.env.PROD`), `llmService` and `externalApiService` automatically route through `/api/` proxy endpoints instead of making direct API calls.
+
+### Desktop (Tauri)
+
+Uses `@tauri-apps/api` for local file storage with localStorage fallback via `src/lib/mockTauri.ts`.
+
 ## Environment Variables
 
-Required in `.env`:
+### Local Development (`.env`)
 ```env
 VITE_GLM_API_KEY=              # Required for LLM features
-VITE_OPENWEATHER_API_KEY=       # Weather data
-VITE_GOOGLE_PLACES_API_KEY=     # Places/hotels/restaurants
+VITE_OPENWEATHER_API_KEY=       # Weather data (optional)
+VITE_GOOGLE_PLACES_API_KEY=     # Places/hotels/restaurants (optional)
 ```
 
-**Important**: The system **requires** LLM API configuration. Mock data fallbacks have been removed - all trip generation must use the LLM API.
+### Vercel Production (server-side, set in Vercel Dashboard)
+```env
+GLM_API_KEY=                   # LLM API key (not exposed to browser)
+OPENWEATHER_API_KEY=           # Weather API key
+GOOGLE_PLACES_API_KEY=         # Places API key
+VITE_SUPABASE_URL=             # Supabase project URL
+VITE_SUPABASE_ANON_KEY=        # Supabase anon key
+```
 
 ## Component Structure
 
@@ -89,13 +122,15 @@ VITE_GOOGLE_PLACES_API_KEY=     # Places/hotels/restaurants
 src/
 ├── components/
 │   ├── chat/           # Chat interface, message display
-│   ├── itinerary/      # Trip itinerary display
+│   ├── itinerary/      # Trip itinerary display, map
 │   ├── layout/         # Header, Sidebar, MainLayout
+│   ├── settings/       # API key configuration
+│   ├── user/           # User dashboard, onboarding
 │   └── ui/             # shadcn/ui base components
 ├── services/
 │   ├── multiAgentService.ts    # Core multi-agent orchestration
-│   ├── llmService.ts           # LLM API integration
-│   ├── externalApiService.ts   # External APIs (weather, places)
+│   ├── llmService.ts           # LLM API integration (direct + proxy)
+│   ├── externalApiService.ts   # External APIs (direct + proxy)
 │   ├── agentUtils.ts           # Intent analysis, trip info extraction
 │   ├── streamService.ts        # Response streaming
 │   ├── exportService.ts        # PDF/Markdown export
@@ -107,17 +142,27 @@ src/
 │   ├── sessionStore.ts         # User sessions
 │   └── tripStore.ts            # Trip data
 ├── lib/
+│   ├── supabase.ts            # Supabase client (web deployment)
 │   └── export/                # Export utilities (PDF, Markdown)
+├── hooks/
+│   └── useAgentProcessing.ts  # Core agent processing hook
+├── pages/                     # Route pages
 └── types/                     # TypeScript definitions
+api/
+├── llm.ts                     # LLM proxy (Vercel Edge Function)
+├── weather.ts                 # Weather proxy
+└── places.ts                  # Places/hotels proxy
 ```
 
 ## Development Notes
 
-- **No Mock Data**: The system intentionally removed mock fallbacks. LLM API must be configured for trip generation.
+- **Dual Mode**: Web deployment uses API proxy routes; desktop/dev uses direct API calls
+- **No Mock Data**: LLM API must be configured for trip generation
 - **Async Generator Pattern**: `MultiAgentService.processWithAgents()` yields messages progressively for real-time UX
-- **Agent Progress Tracking**: All agent activity is tracked in `agentProgressStore` for visualization in AGUI components
+- **Agent Progress Tracking**: All agent activity is tracked in `agentProgressStore` for visualization
 - **External API Caching**: `externalApiService` caches responses to reduce API calls
 - **Streaming**: LLM responses are streamed in real-time via `streamService`
+- **Dark Mode**: Inline script in `index.html` prevents flash by reading localStorage before React loads
 
 ## Type Definitions
 

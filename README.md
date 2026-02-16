@@ -1,175 +1,179 @@
-# Trip Agent
+# Trip Agent - AI 智能旅行规划助手
 
-基于 Multi-Agent 系统的智能旅行规划助手，使用 React + TypeScript + Tauri 构建。
+> Multi-Agent 驱动的智能旅行规划应用，通过多个 AI 专家协作为你生成个性化行程。
+
+**在线体验**: [trip-agent-rho.vercel.app](https://trip-agent-rho.vercel.app)
 
 ## 功能特性
 
-- **Multi-Agent 系统**: 5 个专业 Agent 协同工作（协调者、规划师、推荐师、预订师、文档师）
+- **Multi-Agent 协作**: 5 个专业 Agent（主管、规划师、推荐师、预订专员、文档专员）协同工作
 - **A2UI 主动询问**: 智能收集缺失的旅行信息（目的地、天数、预算、偏好）
 - **AGUI 实时界面**: 可视化展示 Agent 思考过程和工具调用状态
-- **Agent 协作流程**: Multi-Agent 系统协调各专业 Agent 生成完整旅行方案
-- **LLM 集成**: 使用智谱 AI GLM-4-Flash 生成个性化行程
-- **外部 API 集成**: OpenWeatherMap、Google Places 提供实时数据
-- **Tauri 桌面应用**: 跨平台桌面应用支持
+- **实时行程生成**: LLM 流式生成，实时展示 Agent 工作过程
+- **行程地图**: Leaflet 地图标注景点位置和路线
+- **PDF/Markdown 导出**: 一键导出行程文档
+- **暗色模式**: 支持亮色/暗色主题切换
+- **多平台**: 支持 Web (Vercel) 和桌面 (Tauri) 两种部署方式
 
 ## 技术栈
 
-- **前端**: React 19 + TypeScript + Vite
-- **UI**: shadcn/ui + Tailwind CSS
-- **状态管理**: Zustand
-- **LLM**: 智谱 AI GLM-4-Flash
-- **外部 API**: OpenWeatherMap, Google Places
-- **桌面端**: Tauri (Rust)
+| 类别 | 技术 |
+|------|------|
+| 前端 | React 19 + TypeScript + Vite |
+| UI | Tailwind CSS + shadcn/ui + Framer Motion |
+| 状态管理 | Zustand |
+| 地图 | Leaflet + OpenStreetMap |
+| LLM | GLM-4-Flash / OpenAI / Anthropic (多模型支持) |
+| 后端 | Vercel Serverless Edge Functions |
+| 数据库 | Supabase PostgreSQL (RLS) |
+| 桌面 | Tauri 2.x (Rust) |
+| 测试 | Vitest (415 tests) |
 
-## 开发环境设置
+## 快速开始
 
 ### 前置要求
 
-确保你的系统已安装以下软件：
+- **Node.js** v18+ (推荐 v20+)
+- **pnpm** 最新版本
 
-- **Node.js**: v18+ (推荐 v20+)
-- **pnpm**: 最新版本
-- **Rust**: 最新版本（用于 Tauri 桌面应用）
-- **Cargo**: Rust 包管理器（用于 Tauri）
-
-### 1. 安装依赖
-
-#### Windows 系统
-
-**安装 Node.js 和 pnpm:**
-1. 下载并安装 Node.js: https://nodejs.org/
-2. 打开新的命令提示符(CMD)
-3. 安装 pnpm: `npm install -g pnpm`
-
-**安装 Rust 和 Cargo:**
-1. 访问 https://www.rust-lang.org/tools/install.html
-2. 下载并运行 `rustup-init.exe` (Windows x64)
-3. 打开新的命令提示符窗口
-4. 按照屏幕提示完成安装
-
-#### 验证安装
-
-打开新的命令提示符窗口，运行以下命令验证：
+### 1. 克隆并安装
 
 ```bash
-node --version
-pnpm --version
-rustc --version
-cargo --version
+git clone https://github.com/ava-agent/trip-agent.git
+cd trip-agent
+pnpm install
 ```
 
 ### 2. 配置环境变量
 
-复制项目根目录的 `.env.example` 为 `.env` 并配置：
-
-```env
-# 智谱 AI GLM API (必需 - 用于行程生成)
-VITE_GLM_API_KEY=your_glm_api_key_here
-
-# OpenWeatherMap API (天气数据)
-VITE_OPENWEATHER_API_KEY=your_openweather_api_key_here
-
-# Google Places API (景点、酒店推荐)
-VITE_GOOGLE_PLACES_API_KEY=your_google_places_api_key_here
+```bash
+cp .env.example .env
 ```
 
-### 3. 运行开发服务器
+编辑 `.env`，填入你的 API 密钥：
+
+```env
+# 必需：至少配置一个 LLM 提供商
+VITE_GLM_API_KEY=your-glm-api-key    # 推荐，国内访问快速
+
+# 可选：外部 API
+VITE_OPENWEATHER_API_KEY=your-key    # 天气数据
+VITE_GOOGLE_PLACES_API_KEY=your-key  # 景点/酒店推荐
+```
+
+### 3. 启动开发
 
 ```bash
-# 安装依赖
-pnpm install
-
-# 启动开发服务器
-pnpm dev
-
-# 启动 Tauri 开发模式
-pnpm tauri dev
+pnpm dev          # Web 开发模式
+pnpm tauri dev    # 桌面开发模式（需要 Rust）
 ```
 
 ### 4. 运行测试
 
 ```bash
-# 运行所有测试
-pnpm test
+pnpm test:run          # 运行全部 415 个测试
+pnpm test:coverage     # 运行测试覆盖率报告
+```
 
-# 测试 UI 模式
-pnpm test:ui
+## 部署
+
+### Vercel 部署 (推荐)
+
+1. Fork 本仓库到你的 GitHub
+2. 在 [Vercel](https://vercel.com) 导入项目
+3. 配置环境变量：
+
+| 变量 | 说明 | 必需 |
+|------|------|------|
+| `GLM_API_KEY` | LLM API 密钥（服务端安全存储） | 是 |
+| `VITE_SUPABASE_URL` | Supabase 项目 URL | 否 |
+| `VITE_SUPABASE_ANON_KEY` | Supabase anon key | 否 |
+| `OPENWEATHER_API_KEY` | 天气 API 密钥 | 否 |
+| `GOOGLE_PLACES_API_KEY` | 地图 API 密钥 | 否 |
+
+4. 部署完成，自动获得 HTTPS 域名
+
+> 所有 API 密钥通过 Vercel Edge Functions 代理调用，不会暴露给浏览器。
+
+### Supabase 数据库 (可选)
+
+1. 创建 [Supabase](https://supabase.com) 项目
+2. 在 SQL Editor 中运行 `supabase/migrations/001_init.sql`
+3. 表结构自动创建（trips + user_preferences），RLS 策略自动启用
+
+### 桌面应用构建
+
+需要额外安装 [Rust](https://www.rust-lang.org/tools/install)：
+
+```bash
+pnpm tauri build    # 构建桌面安装包
 ```
 
 ## 项目结构
 
 ```
 trip-agent/
+├── api/                        # Vercel Edge Functions
+│   ├── llm.ts                  #   LLM 聊天代理
+│   ├── weather.ts              #   天气查询代理
+│   └── places.ts               #   景点/酒店搜索代理
 ├── src/
-│   ├── components/      # React 组件
-│   │   ├── chat/       # 聊天界面组件
-│   │   ├── ui/          # shadcn/ui 组件
-│   │   ├── stores/       # Zustand 状态管理
-│   ├── services/       # 业务逻辑服务
-│   │   ├── multiAgentService.ts  # Multi-Agent 核心逻辑
-│   │   ├── llmService.ts         # LLM API 集成
-│   │   ├── externalApiService.ts   # 外部 API 集成
-│   │   └── tauri/              # Tauri Rust 后端
-│   ├── stores/         # Zustand 状态管理
-│   ├── lib/            # 工具库
-│   └── types/          # TypeScript 类型定义
-├── src-tauri/       # Tauri Rust 源码
-└── docs/               # 项目文档
+│   ├── components/
+│   │   ├── chat/               #   聊天界面
+│   │   ├── itinerary/          #   行程卡片、地图
+│   │   ├── layout/             #   布局 (Header, Sidebar)
+│   │   ├── settings/           #   API 配置
+│   │   ├── user/               #   用户面板、偏好
+│   │   └── ui/                 #   shadcn/ui 基础组件
+│   ├── services/
+│   │   ├── multiAgentService   #   Multi-Agent 编排引擎
+│   │   ├── llmService          #   LLM 多模型集成
+│   │   ├── externalApiService  #   外部 API (天气/地点)
+│   │   └── contextValidator    #   A2UI 上下文验证
+│   ├── stores/                 #   Zustand 状态管理
+│   ├── hooks/                  #   React Hooks
+│   ├── lib/                    #   工具库 (Supabase, 导出)
+│   └── types/                  #   TypeScript 类型定义
+├── supabase/migrations/        # 数据库迁移脚本
+├── src-tauri/                  # Tauri Rust 后端
+├── docs/                       # 设计文档
+└── vercel.json                 # Vercel 部署配置
 ```
 
-## Agent 架构
+## Multi-Agent 架构
 
-### Multi-Agent 协作流程
+```
+用户输入 → [主管 Agent] → 意图识别 + 任务分配
+                ├── [规划师 Agent] → 生成每日行程
+                ├── [推荐师 Agent] → 天气/餐厅/酒店推荐
+                ├── [预订专员 Agent] → 价格对比/预订链接
+                └── [文档专员 Agent] → 格式化导出
+```
 
-![Agent 规划流程](images/agent规划.png)
+| Agent | 职责 | 工具 |
+|-------|------|------|
+| **SupervisorAgent** | 意图识别、任务分配、上下文验证 | `analyze_intent`, `delegate_agents` |
+| **PlannerAgent** | 生成详细每日行程 | `search_attractions`, `calculate_route` |
+| **RecommenderAgent** | 个性化推荐（天气、酒店、餐厅） | `get_weather`, `search_hotels` |
+| **BookingAgent** | 价格对比、预订链接 | `check_availability`, `get_price` |
+| **DocumentAgent** | 行程格式化与导出 | `format_itinerary` |
 
-### 专业 Agent 分工
+### 工作流程
 
-| Agent | 职责 |
-|-------|------|
-| SupervisorAgent | 协调 |
-| PlannerAgent | 规划 |
-| RecommenderAgent | 推荐 |
-| BookingAgent | 预订 |
-| DocumentAgent | 文档 |
-
-### A2UI - 智能信息收集
-
-当用户信息不完整时，系统会主动询问补充信息：
-![A2UI 界面](images/a2ui.png)
-
-### AGUI - 实时进度展示
-
-可视化展示 Agent 思考过程和工具调用状态：
-![AGUI 界面](images/agui.png)
+1. **A2UI 上下文验证** — 自动收集缺失的旅行信息（支持 1-365 天）
+2. **主管分析意图** — 识别用户需求并分配任务
+3. **专家协作处理** — 各 Agent 执行专业任务
+4. **流式输出结果** — 实时展示 Agent 生成过程
+5. **行程卡片展示** — 完整行程 + 地图 + 导出
 
 ## API 密钥获取
 
-### 智谱 AI
-
-https://open.bigmodel.cn/
-
-### OpenWeatherMap
-
-https://openweathermap.org/api
-
-### Google Places
-
-https://developers.google.com/maps/documentation/places/web-service/get-api-key
-
-## 构建桌面应用
-
-### 开发模式
-
-```bash
-pnpm tauri dev
-```
-
-### 生产构建
-
-```bash
-pnpm tauri build
-```
+| 服务 | 获取地址 | 用途 |
+|------|---------|------|
+| 智谱 AI (GLM) | https://open.bigmodel.cn/usercenter/apikeys | LLM 行程生成 |
+| OpenAI | https://platform.openai.com/api-keys | LLM (备选) |
+| OpenWeatherMap | https://openweathermap.org/api | 天气数据 |
+| Google Places | https://console.cloud.google.com/ | 景点/酒店 |
 
 ## 许可证
 
