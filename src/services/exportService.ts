@@ -31,7 +31,7 @@ export class ExportService {
     try {
       PdfExportService.exportToPdf(trip)
     } catch (error) {
-      console.error("PDF 导出失败，尝试使用打印方式:", error)
+      if (import.meta.env.DEV) console.error("PDF 导出失败，尝试使用打印方式:", error)
       // 如果 jsPDF 失败，回退到打印方式
       this.exportToPrint(trip)
     }

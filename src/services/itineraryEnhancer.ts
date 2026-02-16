@@ -212,10 +212,10 @@ export class ItineraryEnhancer {
       let weatherData: WeatherData[] = []
 
       if (llmResourceService.isAvailable()) {
-        console.log('[ItineraryEnhancer] 使用 LLM 生成天气数据')
+        if (import.meta.env.DEV) console.log('[ItineraryEnhancer] 使用 LLM 生成天气数据')
         weatherData = await llmResourceService.generateWeatherBatch(destination, dates)
       } else {
-        console.warn('[ItineraryEnhancer] LLM 未配置，使用模拟天气数据')
+        if (import.meta.env.DEV) console.warn('[ItineraryEnhancer] LLM 未配置，使用模拟天气数据')
         // 使用模拟数据作为降级方案
         weatherData = dates.map(date => ({
           date,
@@ -267,7 +267,7 @@ export class ItineraryEnhancer {
       let attractionsData: AttractionData[] = []
 
       if (llmResourceService.isAvailable()) {
-        console.log('[ItineraryEnhancer] 使用 LLM 生成景点数据')
+        if (import.meta.env.DEV) console.log('[ItineraryEnhancer] 使用 LLM 生成景点数据')
         const llmAttractions = await llmResourceService.generateAttractions(destination, 10)
 
         // 转换 LLM 返回的数据格式为本地格式
@@ -287,7 +287,7 @@ export class ItineraryEnhancer {
           location: attr.location
         }))
       } else {
-        console.warn('[ItineraryEnhancer] LLM 未配置，使用模拟景点数据')
+        if (import.meta.env.DEV) console.warn('[ItineraryEnhancer] LLM 未配置，使用模拟景点数据')
         // 使用模拟数据作为降级方案
         attractionsData = [
           {
@@ -389,7 +389,7 @@ export class ItineraryEnhancer {
           return transportInfo
         }
       } catch (error) {
-        console.warn('[ItineraryEnhancer] LLM transport generation failed, using fallback:', error)
+        if (import.meta.env.DEV) console.warn('[ItineraryEnhancer] LLM transport generation failed, using fallback:', error)
       }
     }
 

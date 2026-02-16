@@ -19,7 +19,7 @@ import {
   type LLMProvider,
 } from "./llmService"
 import { externalApiService } from "./externalApiService"
-import type { WeatherData, Place, Hotel } from "./externalApiService"
+import type { Place, Hotel } from "./externalApiService"
 import { useAgentProgressStore } from "@/stores/agentProgressStore"
 
 // A2UI imports
@@ -70,6 +70,7 @@ export function getLLMProviderName(): string {
     glm: "智谱 GLM",
     openai: "OpenAI",
     anthropic: "Anthropic Claude",
+    proxy: "服务端代理",
   }
   return provider ? providerNames[provider] : "未配置"
 }
@@ -379,20 +380,36 @@ class RecommenderAgent {
       type: "action",
     })
 
-    let weather: WeatherData | null = null
     try {
       if (destination) {
-        weather = await externalApiService.getWeather(destination)
-        const sourceLabel = weather.source === "api" ? "" : weather.source === "cache" ? " (缓存)" : ""
-        useAgentProgressStore.getState().completeToolCall(getWeatherToolId, { weather: weather.current.condition })
+        let weatherInfo: string
+        const apiStatus = externalApiService.getApiStatus()
+
+        if (apiStatus.openWeatherMap) {
+          // Use external API when key is available
+          const weather = await externalApiService.getWeather(destination)
+          const sourceLabel = weather.source === "cache" ? " (缓存)" : ""
+          weatherInfo = `${weather.current.description || weather.current.condition}, ${weather.current.temp}°C${sourceLabel}`
+          useAgentProgressStore.getState().completeToolCall(getWeatherToolId, { weather: weather.current.condition })
+        } else {
+          // Use LLM for weather when API key is not configured
+          const { getWeatherWithLLM } = await import("./agentUtils")
+          const { days } = extractTripInfo(context.userMessage, context.existingContext)
+          const llmWeather = await getWeatherWithLLM(destination, days || 5)
+          weatherInfo = `${llmWeather.condition}, ${llmWeather.temp} (AI预测)`
+          if (llmWeather.advice) {
+            weatherInfo += `\n💡 ${llmWeather.advice}`
+          }
+          useAgentProgressStore.getState().completeToolCall(getWeatherToolId, { weather: llmWeather.condition, source: "llm" })
+        }
+
         messages.push({
           agent: "recommender",
-          content: `✓ 天气预报: ${weather.current.description || weather.current.condition}, ${weather.current.temp}°C${sourceLabel}`,
+          content: `✓ 天气预报: ${weatherInfo}`,
           timestamp: new Date(),
           type: "result",
         })
       } else {
-        // No destination specified - skip weather
         useAgentProgressStore.getState().completeToolCall(getWeatherToolId, { weather: "未指定目的地" })
         messages.push({
           agent: "recommender",
@@ -436,7 +453,7 @@ class RecommenderAgent {
         })
       }
     } catch (error) {
-      console.warn("Hotel search failed, using fallback:", error)
+      if (import.meta.env.DEV) console.warn("Hotel search failed, using fallback:", error)
     }
 
     // Filter by accommodation type preference
@@ -474,7 +491,7 @@ class RecommenderAgent {
         restaurants = await externalApiService.searchPlaces("restaurants food dining", destination, "restaurant")
       }
     } catch (error) {
-      console.warn("Restaurant search failed, using fallback:", error)
+      if (import.meta.env.DEV) console.warn("Restaurant search failed, using fallback:", error)
     }
 
     // Filter by interests/dietary restrictions
@@ -703,8 +720,8 @@ export class MultiAgentService {
 
 
 
-    // A2UI: Validate context first
-    const validation = contextValidator.validateFromMessage(
+    // A2UI: Validate context first (async for LLM-enhanced extraction)
+    const validation = await contextValidator.validateFromMessageAsync(
       context.userMessage,
       existingContext,
       context.userPreferences
@@ -853,14 +870,29 @@ export class MultiAgentService {
     "activities": [
       {
         "type": "attraction",
-        "name": "景点名称",
-        "description": "简短描述",
-        "locationName": "地点名称",
-        "address": "详细地址",
+        "name": "外滩",
+        "description": "欣赏黄浦江两岸风光",
+        "locationName": "外滩",
+        "address": "上海市黄浦区中山东一路",
+        "latitude": 31.2397,
+        "longitude": 121.4908,
         "startTime": "09:00",
-        "endTime": "12:00",
-        "duration": 180,
-        "cost": 100
+        "endTime": "11:00",
+        "duration": 120,
+        "cost": 0
+      },
+      {
+        "type": "dining",
+        "name": "南翔馒头店",
+        "description": "品尝上海特色小笼包",
+        "locationName": "南翔馒头店（豫园店）",
+        "address": "上海市黄浦区豫园路85号",
+        "latitude": 31.2272,
+        "longitude": 121.4924,
+        "startTime": "11:30",
+        "endTime": "12:30",
+        "duration": 60,
+        "cost": 80
       }
     ],
     "notes": "当日备注"
@@ -875,7 +907,8 @@ export class MultiAgentService {
 4. 活动类型包括：attraction（观光）、dining（用餐）、shopping（购物）、transportation（交通）、other（其他）
 5. 时间使用 24 小时制格式 HH:mm
 6. 费用单位是元
-7. 确保每天的活动多样化且有意义`
+7. 确保每天的活动多样化且有意义
+8. 每个活动必须包含该地点真实的经纬度坐标（latitude/longitude），不同地点的坐标必须不同，精确到小数点后4位，用于地图标注和路线展示`
 
     const llmMessages: LLMMessage[] = [
       { role: "system", content: systemPrompt },
@@ -894,31 +927,67 @@ export class MultiAgentService {
   }
 
   /**
-   * Parse LLM response to itinerary
+   * Parse LLM response to itinerary with robust JSON extraction
    */
   private static parseItineraryFromResponse(response: string): DayPlan[] {
-    // Extract JSON from response
-    const jsonMatch = response.match(/```json\s*([\s\S]*?)\s*```/) ||
-                     response.match(/\[[\s\S]*\](?=\s*$)/)
+    let jsonStr: string | null = null
 
-    if (!jsonMatch) {
-
-      throw new Error('Failed to parse LLM response')
+    // Pattern 1: ```json ... ```
+    const jsonBlockMatch = response.match(/```json\s*([\s\S]*?)\s*```/)
+    if (jsonBlockMatch) {
+      jsonStr = jsonBlockMatch[1]
     }
 
-    const jsonStr = jsonMatch[1] || jsonMatch[0]
-    const parsedData = JSON.parse(jsonStr)
+    // Pattern 2: ``` ... ``` (without json label)
+    if (!jsonStr) {
+      const codeBlockMatch = response.match(/```\s*([\s\S]*?)\s*```/)
+      if (codeBlockMatch) {
+        jsonStr = codeBlockMatch[1]
+      }
+    }
+
+    // Pattern 3: Raw JSON array anywhere in response
+    if (!jsonStr) {
+      const rawJsonMatch = response.match(/\[[\s\S]*\]/)
+      if (rawJsonMatch) {
+        jsonStr = rawJsonMatch[0]
+      }
+    }
+
+    if (!jsonStr) {
+      if (import.meta.env.DEV) {
+        console.error("[parseItineraryFromResponse] No JSON found in response:", response.substring(0, 500))
+      }
+      throw new Error("无法从 LLM 响应中解析行程数据")
+    }
+
+    let parsedData: any[]
+    try {
+      parsedData = JSON.parse(jsonStr)
+    } catch {
+      if (import.meta.env.DEV) {
+        console.error("[parseItineraryFromResponse] JSON parse failed, input:", jsonStr.substring(0, 500))
+      }
+      throw new Error("行程数据格式无效")
+    }
+
+    if (!Array.isArray(parsedData) || parsedData.length === 0) {
+      throw new Error("行程数据为空")
+    }
 
     // Transform to DayPlan format
     return parsedData.map((dayData: any) => {
-      const activities = dayData.activities.map((act: any, index: number) => ({
+      const activities = (dayData.activities || []).map((act: any, index: number) => ({
         id: `act-${dayData.dayNumber}-${index + 1}`,
         type: act.type || "attraction",
         name: act.name || "活动",
         description: act.description || "",
         location: {
           name: act.locationName || act.name,
-          address: act.address || `${act.locationName}`,
+          address: act.address || `${act.locationName || act.name}`,
+          ...(act.latitude != null && act.longitude != null
+            ? { coordinates: { lat: act.latitude, lng: act.longitude } }
+            : {}),
         },
         time: {
           start: act.startTime || "09:00",
@@ -928,11 +997,18 @@ export class MultiAgentService {
         cost: act.cost || 0,
       }))
 
+      // Calculate estimated budget for the day from activity costs
+      const estimatedBudget = activities.reduce(
+        (sum: number, act: { cost: number }) => sum + (act.cost || 0),
+        0
+      )
+
       return {
         dayNumber: dayData.dayNumber,
         date: new Date(Date.now() + (dayData.dayNumber - 1) * 24 * 60 * 60 * 1000),
         activities,
         notes: dayData.notes || "",
+        estimatedBudget,
       }
     })
   }

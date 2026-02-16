@@ -318,7 +318,7 @@ class ErrorServiceClass {
     }
 
     // Log to console with context
-    console.error(`[ErrorService] ${code}:`, {
+    if (import.meta.env.DEV) console.error(`[ErrorService] ${code}:`, {
       ...report,
       originalError
     })

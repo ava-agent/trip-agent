@@ -25,7 +25,7 @@ class ApiConfigService {
         this.config = JSON.parse(stored)
       }
     } catch (error) {
-      console.warn("Failed to load API config from localStorage:", error)
+      if (import.meta.env.DEV) console.warn("Failed to load API config from localStorage:", error)
     }
   }
 
@@ -34,7 +34,7 @@ class ApiConfigService {
     try {
       localStorage.setItem("trip-agent-api-config", JSON.stringify(this.config))
     } catch (error) {
-      console.warn("Failed to save API config to localStorage:", error)
+      if (import.meta.env.DEV) console.warn("Failed to save API config to localStorage:", error)
     }
   }
 

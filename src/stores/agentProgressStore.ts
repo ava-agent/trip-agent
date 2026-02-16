@@ -292,9 +292,7 @@ export const useAgentProgressStore = create<AgentProgressState>((set, get) => ({
               status: "completed" as const,
               endTime: new Date(),
               output,
-              duration: tool.endTime
-                ? new Date(tool.endTime).getTime() - new Date(tool.startTime).getTime()
-                : undefined,
+              duration: new Date().getTime() - new Date(tool.startTime).getTime(),
             }
           : tool
       )

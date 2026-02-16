@@ -5,7 +5,6 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest"
 import { useSessionStore, getUserPreferences, getUserContext } from "../sessionStore"
-import type { UserSession } from "@/types"
 
 describe("sessionStore", () => {
   // Store original localStorage
@@ -290,9 +289,10 @@ describe("sessionStore", () => {
       const feedback = {
         tripId: "trip-123",
         recommendationType: "destination" as const,
-        rating: 5,
-        comment: "Great trip!",
+        itemName: "Tokyo Tower",
+        feedback: "positive" as const,
         timestamp: new Date(),
+        reason: "Great trip!",
       }
 
       useSessionStore.getState().addFeedback(feedback)
@@ -300,7 +300,7 @@ describe("sessionStore", () => {
       const state = useSessionStore.getState()
       expect(state.session.feedback).toHaveLength(1)
       expect(state.session.feedback[0].tripId).toBe("trip-123")
-      expect(state.session.feedback[0].rating).toBe(5)
+      expect(state.session.feedback[0].feedback).toBe("positive")
       expect(state.session.feedback[0].id).toMatch(/^feedback-\d+-/)
     })
 
@@ -310,9 +310,10 @@ describe("sessionStore", () => {
         useSessionStore.getState().addFeedback({
           tripId: `trip-${i}`,
           recommendationType: "destination" as const,
-          rating: 5,
-          comment: `Feedback ${i}`,
+          itemName: `Item ${i}`,
+          feedback: "positive" as const,
           timestamp: new Date(),
+          reason: `Feedback ${i}`,
         })
       }
 

@@ -98,28 +98,53 @@ export function useAgentProcessing() {
         async (agentContext: ReturnType<typeof buildAgentContext>) => {
             await new Promise((resolve) => setTimeout(resolve, 800))
 
-            const trip = await MultiAgentService.generateTripFromContext(agentContext)
-            useTripStore.getState().setCurrentTrip(trip)
+            try {
+                const trip = await MultiAgentService.generateTripFromContext(agentContext)
+                useTripStore.getState().setCurrentTrip(trip)
+                useChatStore.getState().setCurrentTripId(trip.id)
 
-            const finalResponse =
-                `✨ ${trip.name}已生成完成！\n\n` +
-                `📅 行程概览：\n` +
-                `• 目的地：${trip.destination.name}\n` +
-                `• 天数：${trip.duration.days}天\n` +
-                `• 活动数：${trip.itinerary.reduce((sum, day) => sum + day.activities.length, 0)}个\n` +
-                `• 预算：¥${trip.itinerary.reduce((sum, day) => sum + (day.estimatedBudget || 0), 0).toFixed(0)}\n\n` +
-                `💡 点击下方行程卡片查看详细安排，或使用"导出"功能保存行程。`
+                // Auto-save trip to persistent storage
+                try {
+                    await useTripStore.getState().saveTripToStorage(trip)
+                } catch (saveError) {
+                    if (import.meta.env.DEV) console.warn("Failed to auto-save trip:", saveError)
+                }
 
-            const assistantMessage: ChatMessage = {
-                id: `assistant-${Date.now()}`,
-                role: "assistant",
-                content: finalResponse,
-                timestamp: new Date(),
-                status: "completed",
-                metadata: { tripId: trip.id },
+                const totalBudget = trip.itinerary.reduce(
+                    (sum, day) => sum + (day.estimatedBudget || 0),
+                    0
+                )
+
+                const finalResponse =
+                    `✨ ${trip.name}已生成完成！\n\n` +
+                    `📅 行程概览：\n` +
+                    `• 目的地：${trip.destination.name}\n` +
+                    `• 天数：${trip.duration.days}天\n` +
+                    `• 活动数：${trip.itinerary.reduce((sum, day) => sum + day.activities.length, 0)}个\n` +
+                    (totalBudget > 0 ? `• 预计费用：¥${totalBudget.toFixed(0)}\n` : "") +
+                    `\n💡 点击下方行程卡片查看详细安排，或使用"导出"功能保存行程。`
+
+                const assistantMessage: ChatMessage = {
+                    id: `assistant-${Date.now()}`,
+                    role: "assistant",
+                    content: finalResponse,
+                    timestamp: new Date(),
+                    status: "completed",
+                    metadata: { tripId: trip.id },
+                }
+                addMessage(assistantMessage)
+                trackAssistantMessage(finalResponse, trip.id)
+            } catch (error) {
+                const errorDetail = error instanceof Error ? error.message : "未知错误"
+                const errorMessage: ChatMessage = {
+                    id: `assistant-${Date.now()}`,
+                    role: "assistant",
+                    content: `⚠️ 行程生成失败：${errorDetail}\n\n请重试，或尝试简化您的需求。`,
+                    timestamp: new Date(),
+                    status: "completed",
+                }
+                addMessage(errorMessage)
             }
-            addMessage(assistantMessage)
-            trackAssistantMessage(finalResponse, trip.id)
         },
         [addMessage, buildAgentContext]
     )
@@ -157,6 +182,7 @@ export function useAgentProcessing() {
                     setAgentMessages((prev) => [...prev, agentMsg])
 
                     if (done) {
+                        setAgentMessages([])
                         await finalizeTripGeneration(agentContext)
                         break
                     }
@@ -197,7 +223,7 @@ export function useAgentProcessing() {
                 isStreamingRef.current = false
                 setProcessing(false)
             } catch (error) {
-                console.error("Agent error:", error)
+                if (import.meta.env.DEV) console.error("Agent error:", error)
                 const errorMessage: ChatMessage = {
                     id: `assistant-${Date.now()}`,
                     role: "assistant",
@@ -239,7 +265,7 @@ export function useAgentProcessing() {
                 isStreamingRef.current = false
                 setProcessing(false)
             } catch (error) {
-                console.error("Agent error:", error)
+                if (import.meta.env.DEV) console.error("Agent error:", error)
                 const errorMessage: ChatMessage = {
                     id: `assistant-${Date.now()}`,
                     role: "assistant",
@@ -269,7 +295,7 @@ export function useAgentProcessing() {
 
             if (nextSequence.isComplete) {
                 const originalMessage = questionState.pendingMessage || ""
-                const fullContext = { ...updatedContext, ...questionState.collectedContext }
+                const fullContext = { ...questionState.collectedContext, ...updatedContext }
 
                 setQuestionState({ sequence: null, pendingMessage: null, collectedContext: {} })
                 await continueWithCollectedContext(originalMessage, fullContext)

@@ -185,8 +185,6 @@ describe("questionStore", () => {
     })
 
     it("should not answer if question not found", () => {
-      const state = useQuestionStore.getState()
-
       // Should not throw error
       expect(() => {
         useQuestionStore.getState().answerQuestion("non-existent", "answer")

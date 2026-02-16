@@ -8,7 +8,6 @@ import {
   QuestionGenerator,
   generateQuestions,
   type Question,
-  type QuestionSequence,
   type QuestionType,
 } from "../questionGenerator"
 import type { MissingInfo } from "../contextValidator"
@@ -582,8 +581,8 @@ describe("QuestionGenerator", () => {
 
       const result = generator.parseAnswer(question, answer, {})
 
-      expect(result.budget?.min).toBe(8000)
-      expect(result.budget?.max).toBe(12000)
+      expect((result.budget as { min: number })?.min).toBe(8000)
+      expect((result.budget as { max: number })?.max).toBe(12000)
     })
 
     it("should parse budget with 'less than' indicator", () => {
@@ -605,8 +604,8 @@ describe("QuestionGenerator", () => {
 
       const result = generator.parseAnswer(question, answer, {})
 
-      expect(result.budget?.min).toBe(10000)
-      expect(result.budget?.max).toBe(20000)
+      expect((result.budget as { min: number })?.min).toBe(10000)
+      expect((result.budget as { max: number })?.max).toBe(20000)
     })
 
     it("should return undefined for invalid budget", () => {
@@ -627,7 +626,7 @@ describe("QuestionGenerator", () => {
 
       expect(result.startDate).toBeInstanceOf(Date)
       if (result.startDate) {
-        const diff = Math.abs(result.startDate.getTime() - expectedDate.getTime())
+        const diff = Math.abs((result.startDate as Date).getTime() - expectedDate.getTime())
         expect(diff).toBeLessThan(1000) // Within 1 second
       }
     })
@@ -641,7 +640,7 @@ describe("QuestionGenerator", () => {
 
       expect(result.startDate).toBeInstanceOf(Date)
       if (result.startDate) {
-        const diff = Math.abs(result.startDate.getTime() - expectedDate.getTime())
+        const diff = Math.abs((result.startDate as Date).getTime() - expectedDate.getTime())
         expect(diff).toBeLessThan(1000)
       }
     })
@@ -662,7 +661,7 @@ describe("QuestionGenerator", () => {
       const result = generator.parseAnswer(question, answer, {})
 
       expect(result.startDate).toBeInstanceOf(Date)
-      expect(result.startDate?.toISOString().startsWith("2025-06-15")).toBe(true)
+      expect((result.startDate as Date)?.toISOString().startsWith("2025-06-15")).toBe(true)
     })
 
     it("should parse preferences with Chinese comma", () => {

@@ -4,7 +4,7 @@
  * 显示Agent调用的工具及其结果，提供透明的执行过程
  */
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -77,9 +77,10 @@ export function ToolCallVisualization({
   const [showAll, setShowAll] = useState(false)
 
   // Extract tool calls from messages
-  const toolCalls = messages
-    .map(msg => parseToolCall(msg))
-    .filter((call): call is ToolCall => call !== null)
+  const toolCalls = useMemo(
+    () => messages.map(msg => parseToolCall(msg)).filter((call): call is ToolCall => call !== null),
+    [messages]
+  )
 
   // Toggle expansion
   const toggleExpand = (id: string) => {

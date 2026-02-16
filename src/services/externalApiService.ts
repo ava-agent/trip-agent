@@ -366,7 +366,7 @@ class RetryHandler {
         // Check if we should retry
         if (attempt < this.config.maxRetries && this.shouldRetry(error)) {
           const delay = this.calculateBackoff(attempt)
-          console.warn(
+          if (import.meta.env.DEV) console.warn(
             `[RetryHandler] ${serviceId} request failed (attempt ${attempt + 1}/${this.config.maxRetries + 1}). Retrying in ${delay}ms...`,
             error instanceof Error ? error.message : error
           )
@@ -506,8 +506,8 @@ class RateLimiter {
     this.tokens = max_tokens
     this.last_refill = new Date()
     this.refill_rate = refill_per_second / 1000
-    this.refill_interval = 100 // refill check every 100ms
-    void this.refill_interval // Mark as intentionally unused for future use
+    this.refill_interval = 100
+    void this.refill_interval
   }
 
   async acquire(tokens: number = 1): Promise<boolean> {
@@ -867,8 +867,13 @@ class ExternalApiService {
       return { ...cached, source: "cache" }
     }
 
-    // Check if API key is available
+    // Check if API key is available - try proxy if not
     if (!this.openWeatherApiKey) {
+      if (import.meta.env.PROD || import.meta.env.VITE_USE_PROXY === "true") {
+        const weather = await this.fetchWeatherFromProxy(city)
+        this.cache.set(cacheKey, weather)
+        return weather
+      }
       throw new Error("OpenWeatherMap API key not configured. Please configure VITE_OPENWEATHER_API_KEY to get weather data.")
     }
 
@@ -878,6 +883,54 @@ class ExternalApiService {
     const weather = await this.fetchWeatherFromAPI(city)
     this.cache.set(cacheKey, weather)
     return weather
+  }
+
+  private async fetchWeatherFromProxy(city: string): Promise<WeatherData> {
+    const response = await fetch(`/api/weather?city=${encodeURIComponent(city)}`)
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: response.statusText }))
+      throw new Error(error.error || `Weather proxy error: ${response.status}`)
+    }
+    const data = await response.json()
+    const current = data.current
+    const forecast = data.forecast
+
+    // Process forecast data
+    const dailyForecast: WeatherData["forecast"] = []
+    if (forecast?.list) {
+      const processedDates = new Set<string>()
+      for (const item of forecast.list) {
+        const date = new Date(item.dt * 1000)
+        const dateKey = date.toISOString().split("T")[0]
+        if (!processedDates.has(dateKey) && date.getHours() >= 11 && date.getHours() <= 13) {
+          dailyForecast.push({
+            date,
+            temp_min: item.main.temp_min,
+            temp_max: item.main.temp_max,
+            condition: item.weather[0]?.main || "Unknown",
+            icon: item.weather[0]?.icon || "01d",
+          })
+          processedDates.add(dateKey)
+        }
+        if (dailyForecast.length >= 5) break
+      }
+    }
+
+    return {
+      city: current.name || city,
+      country: current.sys?.country || "",
+      current: {
+        temp: current.main?.temp ?? 0,
+        feels_like: current.main?.feels_like ?? 0,
+        humidity: current.main?.humidity ?? 0,
+        condition: current.weather?.[0]?.main || "Unknown",
+        description: current.weather?.[0]?.description || "",
+        icon: current.weather?.[0]?.icon || "01d",
+        wind_speed: current.wind?.speed ?? 0,
+      },
+      forecast: dailyForecast,
+      source: "api",
+    }
   }
 
   private async fetchWeatherFromAPI(city: string): Promise<WeatherData> {
@@ -949,8 +1002,13 @@ class ExternalApiService {
       return cached.map(p => ({ ...p, source: "cache" as const }))
     }
 
-    // Check if API key is available
+    // Check if API key is available - try proxy if not
     if (!this.googlePlacesApiKey) {
+      if (import.meta.env.PROD || import.meta.env.VITE_USE_PROXY === "true") {
+        const places = await this.fetchPlacesFromProxy(query, location, type)
+        this.cache.set(cacheKey, places)
+        return places
+      }
       throw new Error("Google Places API key not configured. Please configure VITE_GOOGLE_PLACES_API_KEY to get place recommendations.")
     }
 
@@ -960,6 +1018,47 @@ class ExternalApiService {
     const places = await this.fetchPlacesFromAPI(query, location, type)
     this.cache.set(cacheKey, places)
     return places
+  }
+
+  private async fetchPlacesFromProxy(query: string, location: string, type: string): Promise<Place[]> {
+    const typeMap: Record<string, string> = {
+      attraction: "tourist_attraction",
+      restaurant: "restaurant",
+      hotel: "lodging",
+      shopping: "shopping_mall",
+    }
+    const googleType = typeMap[type] || "establishment"
+    const params = new URLSearchParams({
+      action: "search",
+      query,
+      location,
+      type: googleType,
+    })
+    const response = await fetch(`/api/places?${params}`)
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: response.statusText }))
+      throw new Error(error.error || `Places proxy error: ${response.status}`)
+    }
+    const data = await response.json()
+    if (data.status !== "OK" && data.status !== "ZERO_RESULTS") {
+      throw new Error(`Places API error: ${data.error_message || data.status}`)
+    }
+    return (data.results || []).map((place: any) => ({
+      id: place.place_id,
+      name: place.name,
+      type: type as Place["type"],
+      description: place.types?.join(", "),
+      address: place.vicinity || "",
+      coordinates: place.geometry?.location ? {
+        lat: place.geometry.location.lat,
+        lng: place.geometry.location.lng,
+      } : undefined,
+      rating: place.rating,
+      price_level: place.price_level,
+      photos: place.photos?.map((p: any) => p.proxy_url || ""),
+      opening_hours: place.opening_hours ? (place.opening_hours.open_now ? "营业中" : "已打烊") : undefined,
+      source: "api" as const,
+    }))
   }
 
   private async fetchPlacesFromAPI(query: string, location: string, type: string): Promise<Place[]> {
@@ -1039,8 +1138,8 @@ class ExternalApiService {
       return cached.map(h => ({ ...h, source: "cache" as const }))
     }
 
-    // Check if API key is available
-    if (!this.googlePlacesApiKey) {
+    // Check if API key is available (proxy mode is handled by searchPlaces)
+    if (!this.googlePlacesApiKey && !import.meta.env.PROD && import.meta.env.VITE_USE_PROXY !== "true") {
       throw new Error("Google Places API key not configured. Please configure VITE_GOOGLE_PLACES_API_KEY to get hotel recommendations.")
     }
 

@@ -17,10 +17,6 @@
         "height": 700,
         "resizable": true,
         "fullscreen": false
-        "webSecurity": {
-          "nodeIntegration": false,
-          "contextMenus": true
-        }
       }
     ],
     "security": {

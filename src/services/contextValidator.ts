@@ -5,7 +5,7 @@
  * 按优先级排序缺失字段（required > recommended）
  */
 
-import { extractTripInfo } from './agentUtils'
+import { extractTripInfo, extractTripInfoWithLLM } from './agentUtils'
 import type { UserPreferences, BudgetRange } from '../types'
 
 /**
@@ -82,7 +82,7 @@ const DEFAULT_OPTIONS: Required<ValidationOptions> = {
   startDateRequired: false,
   defaultDays: 5,
   minDays: 1,
-  maxDays: 30,
+  maxDays: 365,
 } as const
 
 /**
@@ -132,6 +132,26 @@ export class ContextValidator {
     )
 
     // 验证完整性
+    return this.validate(mergedContext)
+  }
+
+  /**
+   * 异步版本：使用 LLM 增强的信息提取
+   * 当正则无法识别目的地时，回退到 LLM 提取
+   */
+  async validateFromMessageAsync(
+    message: string,
+    existingContext?: Partial<TripContext>,
+    preferences?: UserPreferences
+  ): Promise<ValidationResult> {
+    const extractedInfo = await extractTripInfoWithLLM(message, existingContext)
+
+    const mergedContext: Partial<TripContext> = this.mergeContext(
+      extractedInfo,
+      existingContext,
+      preferences
+    )
+
     return this.validate(mergedContext)
   }
 

@@ -9,8 +9,6 @@ import {
   contextValidator,
   validateTripContext,
   type ValidationResult,
-  type TripContext,
-  type MissingInfo,
   type TripContextField,
 } from "../contextValidator"
 import type { UserPreferences } from "@/types"

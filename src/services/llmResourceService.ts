@@ -299,7 +299,7 @@ function safeParseJSON<T>(content: string, fallback: T): T {
     const jsonStr = extractJSON(content)
     return JSON.parse(jsonStr) as T
   } catch (error) {
-    console.warn("[LLMResourceService] JSON parse error, using fallback:", error)
+    if (import.meta.env.DEV) console.warn("[LLMResourceService] JSON parse error, using fallback:", error)
     return fallback
   }
 }
@@ -327,7 +327,7 @@ export class LLMResourceService {
     date: string
   ): Promise<WeatherData | null> {
     if (!this.isAvailable()) {
-      console.warn("[LLMResourceService] GLM not configured")
+      if (import.meta.env.DEV) console.warn("[LLMResourceService] GLM not configured")
       return null
     }
 
@@ -349,7 +349,7 @@ export class LLMResourceService {
 
         return safeParseJSON<WeatherData>(response, defaultWeather)
       } catch (error) {
-        console.error(`[LLMResourceService] Weather generation attempt ${attempt + 1} failed:`, error)
+        if (import.meta.env.DEV) console.error(`[LLMResourceService] Weather generation attempt ${attempt + 1} failed:`, error)
 
         if (attempt < this.retryCount - 1) {
           await this.sleep(this.retryDelay * (attempt + 1))
@@ -398,7 +398,7 @@ export class LLMResourceService {
     count: number = 10
   ): Promise<AttractionData[]> {
     if (!this.isAvailable()) {
-      console.warn("[LLMResourceService] GLM not configured")
+      if (import.meta.env.DEV) console.warn("[LLMResourceService] GLM not configured")
       return []
     }
 
@@ -408,7 +408,7 @@ export class LLMResourceService {
       const response = await LLMService.chatCompletion(messages)
       return safeParseJSON<AttractionData[]>(response, [])
     } catch (error) {
-      console.error("[LLMResourceService] Attractions generation failed:", error)
+      if (import.meta.env.DEV) console.error("[LLMResourceService] Attractions generation failed:", error)
       return []
     }
   }
@@ -421,7 +421,7 @@ export class LLMResourceService {
     count: number = 5
   ): Promise<HotelData[]> {
     if (!this.isAvailable()) {
-      console.warn("[LLMResourceService] GLM not configured")
+      if (import.meta.env.DEV) console.warn("[LLMResourceService] GLM not configured")
       return []
     }
 
@@ -431,7 +431,7 @@ export class LLMResourceService {
       const response = await LLMService.chatCompletion(messages)
       return safeParseJSON<HotelData[]>(response, [])
     } catch (error) {
-      console.error("[LLMResourceService] Hotels generation failed:", error)
+      if (import.meta.env.DEV) console.error("[LLMResourceService] Hotels generation failed:", error)
       return []
     }
   }
@@ -444,7 +444,7 @@ export class LLMResourceService {
     count: number = 5
   ): Promise<RestaurantData[]> {
     if (!this.isAvailable()) {
-      console.warn("[LLMResourceService] GLM not configured")
+      if (import.meta.env.DEV) console.warn("[LLMResourceService] GLM not configured")
       return []
     }
 
@@ -454,7 +454,7 @@ export class LLMResourceService {
       const response = await LLMService.chatCompletion(messages)
       return safeParseJSON<RestaurantData[]>(response, [])
     } catch (error) {
-      console.error("[LLMResourceService] Restaurants generation failed:", error)
+      if (import.meta.env.DEV) console.error("[LLMResourceService] Restaurants generation failed:", error)
       return []
     }
   }
@@ -475,7 +475,7 @@ export class LLMResourceService {
     instructions: string[]
   } | null> {
     if (!this.isAvailable()) {
-      console.warn("[LLMResourceService] GLM not configured")
+      if (import.meta.env.DEV) console.warn("[LLMResourceService] GLM not configured")
       return null
     }
 
@@ -485,7 +485,7 @@ export class LLMResourceService {
       const response = await LLMService.chatCompletion(messages)
       return safeParseJSON(response, null)
     } catch (error) {
-      console.error("[LLMResourceService] Transport generation failed:", error)
+      if (import.meta.env.DEV) console.error("[LLMResourceService] Transport generation failed:", error)
       return null
     }
   }

@@ -3,7 +3,7 @@
  * Testing UI state management with Zustand
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest"
+import { describe, it, expect, afterEach } from "vitest"
 import { useUiStore } from "../uiStore"
 
 describe("uiStore", () => {

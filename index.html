@@ -1,14 +1,31 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Trip Agent - AI Travel Planning</title>
+    <meta name="description" content="Trip Agent - AI 智能旅行规划助手，帮你生成个性化行程" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#09090b" media="(prefers-color-scheme: dark)" />
+    <title>Trip Agent - AI 旅行规划</title>
   </head>
   <body>
+    <script>
+      // Prevent dark mode flash: apply theme before React loads
+      (function() {
+        try {
+          var stored = localStorage.getItem('trip-agent-ui');
+          if (stored) {
+            var parsed = JSON.parse(stored);
+            if (parsed && parsed.state && parsed.state.darkMode) {
+              document.documentElement.classList.add('dark');
+            }
+          }
+        } catch(e) {}
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

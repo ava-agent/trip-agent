@@ -3,9 +3,9 @@
  * Testing agent progress tracking with Zustand
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest"
+import { describe, it, expect, beforeEach } from "vitest"
 import { useAgentProgressStore } from "../agentProgressStore"
-import type { AgentPhase, ToolCall, PhaseStatus, ToolStatus } from "../agentProgressStore"
+import type { AgentPhase } from "../agentProgressStore"
 
 describe("agentProgressStore", () => {
   beforeEach(() => {
@@ -310,20 +310,20 @@ describe("agentProgressStore", () => {
         input: {},
       })
 
-      // Set an endTime first to simulate tool that was running
-      const startTime = new Date("2025-01-01T10:00:00")
-      const endTime = new Date("2025-01-01T10:00:05") // 5 seconds later
+      // Set startTime, then complete - duration should be calculated from startTime to now
+      const now = Date.now()
+      const startTime = new Date(now - 5000) // 5 seconds ago
       useAgentProgressStore.getState().updateToolCall(toolCallId, {
         status: "running",
         startTime: startTime,
       })
-      useAgentProgressStore.getState().updateToolCall(toolCallId, { endTime })
 
-      // Then complete - duration should be calculated
       useAgentProgressStore.getState().completeToolCall(toolCallId, {})
 
       const toolCall = useAgentProgressStore.getState().progress?.toolCalls[0]
-      expect(toolCall?.duration).toBe(5000) // 5 seconds = 5000ms
+      // Duration should be approximately 5000ms (from startTime to completion)
+      expect(toolCall?.duration).toBeGreaterThanOrEqual(4900)
+      expect(toolCall?.duration).toBeLessThanOrEqual(6000)
     })
   })
 

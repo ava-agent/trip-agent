@@ -171,15 +171,7 @@ function ErrorFallback({ error, onRetry }: ErrorFallbackProps): ReactNode {
           {/* Support Link */}
           <div className="mt-6 pt-4 border-t text-center">
             <p className="text-sm text-muted-foreground">
-              如果问题持续存在，请联系支持或查看
-              <a
-                href="https://github.com/your-repo/trip-agent/issues"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:underline ml-1"
-              >
-                GitHub Issues
-              </a>
+              如果问题持续存在，请尝试刷新页面或重启应用。
             </p>
           </div>
         </div>

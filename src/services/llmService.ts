@@ -7,7 +7,7 @@
 // Types and Interfaces
 // ============================================================================
 
-export type LLMProvider = "openai" | "anthropic" | "glm"
+export type LLMProvider = "openai" | "anthropic" | "glm" | "proxy"
 
 export interface LLMMessage {
   role: "system" | "user" | "assistant"
@@ -85,7 +85,9 @@ export class LLMService {
 
     for (let attempt = 0; attempt < this.MAX_RETRIES; attempt++) {
       try {
-        if (config.provider === "openai") {
+        if (config.provider === "proxy") {
+          yield* this.streamProxy(messages, config, onChunk)
+        } else if (config.provider === "openai") {
           yield* this.streamOpenAI(messages, config, onChunk)
         } else if (config.provider === "anthropic") {
           yield* this.streamAnthropic(messages, config, onChunk)
@@ -318,6 +320,80 @@ export class LLMService {
             }
 
             // Check if stream is complete
+            if (data.choices?.[0]?.finish_reason) {
+              return
+            }
+          } catch {
+            // Skip invalid JSON
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock()
+    }
+
+    yield { content: "", done: true }
+  }
+
+  /**
+   * Stream completion via server-side API proxy (/api/llm)
+   */
+  private static async *streamProxy(
+    messages: LLMMessage[],
+    config: LLMConfig,
+    onChunk?: (chunk: string) => void
+  ): AsyncGenerator<LLMStreamChunk> {
+    const proxyURL = config.baseURL || "/api/llm"
+
+    const response = await fetch(proxyURL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages,
+        model: config.model,
+        maxTokens: config.maxTokens,
+        temperature: config.temperature,
+        stream: true,
+      }),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: response.statusText }))
+      throw new Error(errorData.error || `Proxy error: ${response.status}`)
+    }
+
+    const reader = response.body?.getReader()
+    if (!reader) {
+      throw new Error("No response body from proxy")
+    }
+
+    const decoder = new TextDecoder()
+    let buffer = ""
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split("\n")
+        buffer = lines.pop() || ""
+
+        for (const line of lines) {
+          const trimmed = line.trim()
+          if (!trimmed || trimmed === "data: [DONE]") continue
+          if (!trimmed.startsWith("data: ")) continue
+
+          try {
+            const data = JSON.parse(trimmed.slice(6))
+            // OpenAI/GLM format
+            const content = data.choices?.[0]?.delta?.content
+              // Anthropic format
+              || (data.type === "content_block_delta" ? data.delta?.text : undefined)
+            if (content) {
+              onChunk?.(content)
+              yield { content, done: false }
+            }
             if (data.choices?.[0]?.finish_reason) {
               return
             }
@@ -580,6 +656,15 @@ export function loadLLMConfigFromEnv(): LLMConfig | null {
       provider: "anthropic",
       apiKey: anthropicKey,
       model: import.meta.env.VITE_ANTHROPIC_MODEL || undefined,
+    }
+  }
+
+  // Web deployment mode: use server-side API proxy
+  if (import.meta.env.PROD || import.meta.env.VITE_USE_PROXY === "true") {
+    return {
+      provider: "proxy",
+      apiKey: "server-managed",
+      baseURL: "/api/llm",
     }
   }
 

@@ -3,6 +3,7 @@
 // ============================================================================
 
 use std::path::PathBuf;
+use tauri::Manager;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -315,7 +316,6 @@ impl StorageManager {
 // Tauri Commands
 // ============================================================================
 
-use tauri::State;
 use std::sync::Mutex;
 
 /// Global state for the storage manager
@@ -390,7 +390,7 @@ pub async fn get_data_dir(
     let data_dir = app
         .path()
         .app_data_dir()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e: tauri::Error| e.to_string())?;
 
     Ok(data_dir.to_string_lossy().to_string())
 }

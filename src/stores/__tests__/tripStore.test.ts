@@ -14,10 +14,10 @@ describe("tripStore", () => {
   // Helper to create a mock trip
   const createMockTrip = (overrides?: Partial<Trip>): Trip => ({
     id: "trip-123",
+    name: "东京之旅",
     destination: {
       name: "东京",
       country: "日本",
-      region: "关东",
     },
     duration: {
       days: 5,
@@ -33,10 +33,8 @@ describe("tripStore", () => {
     },
     status: "planning",
     itinerary: [],
-    metadata: {
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
+    createdAt: new Date(),
+    updatedAt: new Date(),
     ...overrides,
   })
 
@@ -45,8 +43,10 @@ describe("tripStore", () => {
     type: "attraction",
     name: "浅草寺",
     description: "东京最古老的寺庙",
-    locationName: "台东区",
-    address: "东京都台东区浅草",
+    location: {
+      name: "台东区",
+      address: "东京都台东区浅草",
+    },
     time: {
       start: "09:00",
       end: "12:00",
@@ -76,12 +76,10 @@ describe("tripStore", () => {
   })
 
   describe("initial state", () => {
-    it("should have default trips", () => {
+    it("should have empty trips initially", () => {
       const state = useTripStore.getState()
 
-      expect(state.trips).toHaveLength(3)
-      expect(state.trips[0].id).toBe("1")
-      expect(state.trips[0].name).toBe("东京之旅")
+      expect(state.trips).toHaveLength(0)
       expect(state.currentTrip).toBe(null)
       expect(state.isLoading).toBe(false)
       expect(state.error).toBe(null)
@@ -149,21 +147,18 @@ describe("tripStore", () => {
 
     it("should update updatedAt when updating day", () => {
       const trip = createMockTrip({
-        metadata: {
-          createdAt: new Date("2025-01-01"),
-          updatedAt: new Date("2025-01-01"),
-        },
+        createdAt: new Date("2025-01-01"),
+        updatedAt: new Date("2025-01-01"),
         itinerary: [createMockDayPlan({ dayNumber: 1 })],
       })
 
       useTripStore.getState().setCurrentTrip(trip)
-      const beforeUpdate = useTripStore.getState().currentTrip?.metadata.updatedAt
 
       // Update day - the store sets updatedAt to new Date()
       const updatedDay = createMockDayPlan({ dayNumber: 1 })
       useTripStore.getState().updateTripDay(1, updatedDay)
 
-      const afterUpdate = useTripStore.getState().currentTrip?.metadata.updatedAt
+      const afterUpdate = useTripStore.getState().currentTrip?.updatedAt
 
       // updatedAt should be set (it may be the same millisecond in fast tests)
       expect(afterUpdate).toBeDefined()
@@ -260,20 +255,17 @@ describe("tripStore", () => {
 
     it("should update updatedAt when adding activity", () => {
       const trip = createMockTrip({
-        metadata: {
-          createdAt: new Date("2025-01-01"),
-          updatedAt: new Date("2025-01-01"),
-        },
+        createdAt: new Date("2025-01-01"),
+        updatedAt: new Date("2025-01-01"),
         itinerary: [createMockDayPlan({ dayNumber: 1 })],
       })
 
       useTripStore.getState().setCurrentTrip(trip)
-      const beforeUpdate = useTripStore.getState().currentTrip?.metadata.updatedAt
 
       const activity = createMockActivity()
       useTripStore.getState().addActivity(1, activity)
 
-      const afterUpdate = useTripStore.getState().currentTrip?.metadata.updatedAt
+      const afterUpdate = useTripStore.getState().currentTrip?.updatedAt
 
       // updatedAt should be set (it may be same millisecond in fast tests)
       expect(afterUpdate).toBeDefined()

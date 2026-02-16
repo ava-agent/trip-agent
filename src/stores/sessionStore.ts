@@ -387,6 +387,25 @@ export const useSessionStore = create<SessionState>()(
       name: "trip-agent-session",
       storage: createJSONStorage(() => storageAdapter),
       partialize: (state) => ({ session: state.session, isInitialized: state.isInitialized }),
+      onRehydrateStorage: () => (state) => {
+        if (!state) return
+        const s = state.session
+        // Deserialize date strings back to Date objects
+        s.createdAt = new Date(s.createdAt)
+        s.updatedAt = new Date(s.updatedAt)
+        s.conversationHistory = s.conversationHistory.map((msg) => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp),
+        }))
+        s.destinationInteractions = s.destinationInteractions.map((d) => ({
+          ...d,
+          lastQueried: new Date(d.lastQueried),
+        }))
+        s.feedback = s.feedback.map((f) => ({
+          ...f,
+          timestamp: new Date(f.timestamp),
+        }))
+      },
     }
   )
 )

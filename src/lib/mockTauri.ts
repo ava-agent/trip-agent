@@ -176,7 +176,7 @@ export const TauriExport = {
     const filename = `${(trip as { name: string }).name.replace(/\s+/g, "_")}_行程单.pdf`
 
     // 模拟 PDF 生成
-    console.log("Generating PDF for trip:", tripId)
+    if (import.meta.env.DEV) console.log("Generating PDF for trip:", tripId)
 
     return { success: true, filename }
   },

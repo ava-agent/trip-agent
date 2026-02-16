@@ -3,7 +3,7 @@
  * Testing centralized error handling and user-friendly messages
  */
 
-import { describe, it, expect } from "vitest"
+import { describe, it, expect, vi } from "vitest"
 import {
   ErrorService,
   reportError,
@@ -341,10 +341,10 @@ describe("ErrorService", () => {
   describe("integration", () => {
     it("should handle error reporting workflow", () => {
       // Report a network error
-      const report1 = ErrorService.report(ErrorCode.NETWORK_ERROR, { attempt: 1 })
+      ErrorService.report(ErrorCode.NETWORK_ERROR, { attempt: 1 })
 
       // Report auth error
-      const report2 = ErrorService.report(ErrorCode.INVALID_API_KEY, { attempt: 2 })
+      ErrorService.report(ErrorCode.INVALID_API_KEY, { attempt: 2 })
 
       // Note: getHistory and getStats are not exported
       // We verify that ErrorService works correctly

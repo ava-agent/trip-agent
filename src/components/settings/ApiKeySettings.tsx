@@ -14,6 +14,8 @@ import { Key, Check, X, TestTube, Eye, EyeOff, AlertCircle } from "lucide-react"
 import { externalApiService } from "@/services/externalApiService"
 import { LLMService, type LLMProvider } from "@/services/llmService"
 
+type ConfigurableLLMProvider = Exclude<LLMProvider, "proxy">
+
 interface ApiConfig {
   glm: string
   openai: string
@@ -38,14 +40,8 @@ const VALIDATION_PATTERNS = {
   googlePlaces: /^AIza[A-Za-z0-9_\-]{35,}$/
 }
 
-// Mask API key for display (unused function, commented out)
-// function maskApiKey(key: string): string {
-//   if (!key || key.length < 8) return "•".repeat(8)
-//   return key.substring(0, 4) + "•" + "•".repeat(key.length - 8)
-// }
-
 // Validate API key format
-function validateApiKey(provider: LLMProvider | "openWeatherMap" | "googlePlaces", key: string): ValidationResult {
+function validateApiKey(provider: Exclude<LLMProvider, "proxy"> | "openWeatherMap" | "googlePlaces", key: string): ValidationResult {
   if (!key) {
     return { isValid: false, error: "API 密钥不能为空" }
   }
@@ -105,7 +101,7 @@ export function ApiKeySettings({ className, onSave }: ApiKeySettingsProps) {
           }
         }
       } catch {
-        console.error("Failed to parse saved API keys")
+        if (import.meta.env.DEV) console.error("Failed to parse saved API keys")
       }
     }
 
@@ -113,7 +109,7 @@ export function ApiKeySettings({ className, onSave }: ApiKeySettingsProps) {
     const initialValidation: Record<string, ValidationResult> = {}
     for (const [key, value] of Object.entries(apiKeys)) {
       if (value) {
-        const provider = key as LLMProvider | "openWeatherMap" | "googlePlaces"
+        const provider = key as ConfigurableLLMProvider | "openWeatherMap" | "googlePlaces"
         initialValidation[provider] = validateApiKey(provider, value)
       }
     }
@@ -129,7 +125,7 @@ export function ApiKeySettings({ className, onSave }: ApiKeySettingsProps) {
     setApiKeys(newKeys)
 
     // Validate the new key
-    const result = validateApiKey(provider as LLMProvider | "openWeatherMap" | "googlePlaces", value)
+    const result = validateApiKey(provider as ConfigurableLLMProvider | "openWeatherMap" | "googlePlaces", value)
     setValidation(prev => ({ ...prev, [provider]: result }))
   }
 
@@ -137,7 +133,7 @@ export function ApiKeySettings({ className, onSave }: ApiKeySettingsProps) {
     // Validate all keys before saving
     const hasValidKeys = Object.entries(apiKeys).some(([key, value]) => {
       if (!value) return true // Empty keys are ok
-      const provider = key as LLMProvider | "openWeatherMap" | "googlePlaces"
+      const provider = key as ConfigurableLLMProvider | "openWeatherMap" | "googlePlaces"
       return validateApiKey(provider, value).isValid
     })
 
@@ -206,7 +202,7 @@ export function ApiKeySettings({ className, onSave }: ApiKeySettingsProps) {
         }))
       } else {
         // LLM providers - test with a simple completion
-        const llmProvider = provider as LLMProvider
+        const llmProvider = provider as ConfigurableLLMProvider
         LLMService.initialize({ provider: llmProvider, apiKey: key, model: undefined })
         // Note: We can't actually test without making a request, which costs money
         // So we just validate the format
@@ -251,7 +247,7 @@ export function ApiKeySettings({ className, onSave }: ApiKeySettingsProps) {
     }
   }
 
-  const llmProviders: Array<{ id: LLMProvider; name: string; nameZh: string; description: string; icon: string }> = [
+  const llmProviders: Array<{ id: Exclude<LLMProvider, "proxy">; name: string; nameZh: string; description: string; icon: string }> = [
     {
       id: "glm",
       name: "GLM (智谱 AI)",

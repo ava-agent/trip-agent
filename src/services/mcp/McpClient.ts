@@ -63,7 +63,7 @@ class McpClientClass {
       try {
         handler(event)
       } catch (error) {
-        console.error("[McpClient] Event handler error:", error)
+        if (import.meta.env.DEV) console.error("[McpClient] Event handler error:", error)
       }
     }
   }
@@ -74,7 +74,7 @@ class McpClientClass {
   async connectStdio(config: McpClientConfig & { transport: "stdio" }): Promise<void> {
     const { name } = config
 
-    console.log(`[McpClient] Connecting to stdio server: ${name}`)
+    if (import.meta.env.DEV) console.log(`[McpClient] Connecting to stdio server: ${name}`)
 
     // Create a Web Worker for stdio communication
     // In a real implementation, we would create a worker from a command
@@ -106,7 +106,7 @@ class McpClientClass {
   async connectHttp(config: McpClientConfig & { transport: "http" | "sse" }): Promise<void> {
     const { name, url } = config
 
-    console.log(`[McpClient] Connecting to HTTP server: ${name} at ${url}`)
+    if (import.meta.env.DEV) console.log(`[McpClient] Connecting to HTTP server: ${name} at ${url}`)
 
     // Create WebSocket connection for SSE
     if (!url) {
@@ -115,7 +115,7 @@ class McpClientClass {
     const ws = new WebSocket(url)
 
     ws.onopen = () => {
-      console.log(`[McpClient] Connected to ${name}`)
+      if (import.meta.env.DEV) console.log(`[McpClient] Connected to ${name}`)
       this.setConnectionState(name, {
         isConnected: true,
         isInitialized: false,
@@ -136,7 +136,7 @@ class McpClientClass {
       const response = parseResponse(event.data)
 
       if (!response || !isValidResponse(response)) {
-        console.warn("[McpClient] Invalid response received:", event.data)
+        if (import.meta.env.DEV) console.warn("[McpClient] Invalid response received:", event.data)
         return
       }
 
@@ -144,7 +144,7 @@ class McpClientClass {
     }
 
     ws.onerror = (error) => {
-      console.error(`[McpClient] WebSocket error for ${name}:`, error)
+      if (import.meta.env.DEV) console.error(`[McpClient] WebSocket error for ${name}:`, error)
       this.setConnectionState(name, {
         isConnected: false,
         isInitialized: false,
@@ -155,7 +155,7 @@ class McpClientClass {
     }
 
     ws.onclose = () => {
-      console.log(`[McpClient] Disconnected from ${name}`)
+      if (import.meta.env.DEV) console.log(`[McpClient] Disconnected from ${name}`)
       this.setConnectionState(name, {
         isConnected: false,
         isInitialized: false,
@@ -172,7 +172,7 @@ class McpClientClass {
    * Register an inline server (built into the app)
    */
   registerInlineServer(config: McpInlineServerConfig): void {
-    console.log(`[McpClient] Registering inline server: ${config.name}`)
+    if (import.meta.env.DEV) console.log(`[McpClient] Registering inline server: ${config.name}`)
 
     this.inlineServers.set(config.name, config.tools)
     this.setConnectionState(config.name, {
@@ -188,7 +188,7 @@ class McpClientClass {
    * Initialize an MCP server connection
    */
   async initialize(serverName: string): Promise<void> {
-    console.log(`[McpClient] Initializing server: ${serverName}`)
+    if (import.meta.env.DEV) console.log(`[McpClient] Initializing server: ${serverName}`)
 
     const state = this.getConnectionState(serverName)
     if (!state?.isConnected) {
@@ -212,7 +212,7 @@ class McpClientClass {
    * Disconnect from an MCP server
    */
   async disconnect(serverName: string): Promise<void> {
-    console.log(`[McpClient] Disconnecting from: ${serverName}`)
+    if (import.meta.env.DEV) console.log(`[McpClient] Disconnecting from: ${serverName}`)
 
     const connection = this.connections.get(serverName)
     if (connection) {
@@ -267,7 +267,7 @@ class McpClientClass {
     args?: Record<string, unknown>,
     context?: McpInlineExecutionContext
   ): Promise<McpToolResult> {
-    console.log(`[McpClient] Calling tool: ${serverName}.${toolName}`, args)
+    if (import.meta.env.DEV) console.log(`[McpClient] Calling tool: ${serverName}.${toolName}`, args)
 
     const startTime = Date.now()
 
@@ -288,10 +288,10 @@ class McpClientClass {
       try {
         const result = await tool.handler({ ...args, context })
         const duration = Date.now() - startTime
-        console.log(`[McpClient] Tool ${toolName} completed in ${duration}ms`)
+        if (import.meta.env.DEV) console.log(`[McpClient] Tool ${toolName} completed in ${duration}ms`)
         return result
       } catch (error) {
-        console.error(`[McpClient] Tool ${toolName} error:`, error)
+        if (import.meta.env.DEV) console.error(`[McpClient] Tool ${toolName} error:`, error)
         return {
           content: [{
             type: "text",
@@ -314,7 +314,7 @@ class McpClientClass {
     const pending = this.pendingRequests.get(response.id)
 
     if (!pending) {
-      console.warn("[McpClient] No pending request for response:", response.id)
+      if (import.meta.env.DEV) console.warn("[McpClient] No pending request for response:", response.id)
       return
     }
 

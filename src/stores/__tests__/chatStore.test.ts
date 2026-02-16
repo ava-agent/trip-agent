@@ -5,7 +5,7 @@
 
 import { describe, it, expect, beforeEach } from "vitest"
 import { useChatStore } from "../chatStore"
-import type { ChatMessage } from "../chatStore"
+import type { ChatMessage } from "@/types"
 
 describe("chatStore", () => {
   beforeEach(() => {
@@ -279,7 +279,7 @@ describe("chatStore", () => {
       const state = useChatStore.getState()
       expect(state.messages).toHaveLength(1)
       expect(state.messages[0].id).toBe("welcome")
-      expect(state.messages[0].content).toBe("你好！我是 Trip Agent，你的私人 AI 旅游规划师。")
+      expect(state.messages[0].content).toBe("你好！我是 Trip Agent，你的私人 AI 旅游规划师。我可以帮你：\n\n- **规划详细的旅行行程**\n- **推荐景点、酒店和餐厅**\n- **安排交通和预算**\n- **导出旅行计划 PDF**\n\n请告诉我你想去哪里旅行，我将为你制定完美的行程计划！")
     })
   })
 

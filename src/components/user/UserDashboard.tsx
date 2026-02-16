@@ -2,7 +2,7 @@
  * User Dashboard - Main component integrating all user-related features
  */
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { useSessionStore } from "@/stores/sessionStore"
 import { OnboardingFlow } from "./OnboardingFlow"
 import { ProfilePanel } from "./ProfilePanel"
@@ -32,6 +32,14 @@ export function UserDashboard({ onTripSelect, onClose, className }: UserDashboar
     }
   }, [isInitialized, initializeSession])
 
+  const maturityScore = useMemo(() => Math.round(
+    (session.preferences.interests.length > 0 ? 0.2 : 0) +
+    (session.preferences.budget ? 0.2 : 0) +
+    (session.preferences.accommodationType?.length ? 0.2 : 0) +
+    (session.favoriteDestinations.length > 0 ? 0.2 : 0) +
+    (session.conversationHistory.length > 5 ? 0.2 : 0)
+  ) * 100, [session.preferences, session.favoriteDestinations, session.conversationHistory])
+
   // Show onboarding if not completed
   if (!session.onboardingCompleted) {
     return (
@@ -51,14 +59,6 @@ export function UserDashboard({ onTripSelect, onClose, className }: UserDashboar
       </div>
     )
   }
-
-  const maturityScore = Math.round(
-    (session.preferences.interests.length > 0 ? 0.2 : 0) +
-    (session.preferences.budget ? 0.2 : 0) +
-    (session.preferences.accommodationType?.length ? 0.2 : 0) +
-    (session.favoriteDestinations.length > 0 ? 0.2 : 0) +
-    (session.conversationHistory.length > 5 ? 0.2 : 0)
-  ) * 100
 
   return (
     <div className={className}>
