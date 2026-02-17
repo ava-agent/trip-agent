@@ -20,6 +20,9 @@ dist-ssr
 # Vercel
 .vercel
 
+# Tauri desktop build output
+Trip Agent/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
