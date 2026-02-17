@@ -77,7 +77,7 @@ The core architecture is a **Multi-Agent orchestration system** in `src/services
 
 ### Web (Vercel + Supabase)
 
-**Production URL**: https://trip-agent-rho.vercel.app
+**Production URL**: https://trip.rxcloud.group
 
 **Architecture**:
 - Frontend SPA deployed to Vercel CDN

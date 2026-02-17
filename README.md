@@ -2,7 +2,7 @@
 
 > Multi-Agent 驱动的智能旅行规划应用，通过多个 AI 专家协作为你生成个性化行程。
 
-**在线体验**: [trip-agent-rho.vercel.app](https://trip-agent-rho.vercel.app)
+**在线体验**: [trip.rxcloud.group](https://trip.rxcloud.group)
 
 ## 功能特性
 
